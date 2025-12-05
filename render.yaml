@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: kith-platform
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 2 --timeout 120 main:app
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: FLASK_SECRET_KEY
+        generateValue: true
+      - key: CHROMA_DB_DIR
+        value: /opt/render/project/src/chroma_db
+    disk:
+      name: chromadb-storage
+      mountPath: /opt/render/project/src/chroma_db
+      sizeGB: 1
+
+databases:
+  - name: kith-platform-db
+    plan: free
+    databaseName: kith_platform
+    user: kith_user
+

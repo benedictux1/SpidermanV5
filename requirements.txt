@@ -1,0 +1,32 @@
+# Flask and Web Framework
+Flask==2.3.3
+gunicorn==21.2.0
+
+# Database
+SQLAlchemy==2.0.36
+psycopg2-binary==2.9.9
+
+# Authentication
+Flask-Login==0.6.3
+
+# Environment Variables
+python-dotenv==1.0.0
+
+# AI Services
+openai==0.28.1
+google-generativeai==0.8.5
+google-cloud-vision==3.10.2
+
+# Vector Database
+chromadb==0.4.15
+
+# Telegram Integration (optional, for future use)
+# telethon==1.34.0
+
+# Background Tasks (optional, for future use)
+# celery==5.4.0
+# redis==5.0.4
+
+# Utilities
+Werkzeug==2.3.7
+

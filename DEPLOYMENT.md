@@ -30,6 +30,8 @@ This guide will walk you through deploying the Kith Platform on Render.com so yo
 
 ## Step 2: Create PostgreSQL Database on Render
 
+> 📖 **For detailed step-by-step instructions with exact values, see [RENDER_SETUP_GUIDE.md](./RENDER_SETUP_GUIDE.md)**
+
 1. Go to [Render Dashboard](https://dashboard.render.com/)
 2. Click **"New +"** → **"PostgreSQL"**
 3. Configure:
@@ -40,6 +42,8 @@ This guide will walk you through deploying the Kith Platform on Render.com so yo
    - **Plan**: Free (for testing) or Starter ($7/month for production)
 4. Click **"Create Database"**
 5. **Important**: Copy the **Internal Database URL** (you'll need this later)
+   - Look for "Internal Database URL" in the database details page
+   - It looks like: `postgres://user:password@host:port/database`
 
 ## Step 3: Deploy Web Service on Render
 
@@ -70,20 +74,26 @@ This guide will walk you through deploying the Kith Platform on Render.com so yo
    - **Plan**: Free (for testing) or Starter ($7/month for production)
 
 5. **Add Environment Variables**:
+   > 📖 **See [RENDER_SETUP_GUIDE.md](./RENDER_SETUP_GUIDE.md) Section 2.6 for detailed instructions**
+   
+   Add each variable by clicking "Add Environment Variable":
    - `FLASK_ENV` = `production`
    - `FLASK_SECRET_KEY` = Generate a random secret (use: `python -c "import secrets; print(secrets.token_hex(32))"`)
    - `DATABASE_URL` = Your PostgreSQL Internal Database URL from Step 2
    - `CHROMA_DB_DIR` = `/opt/render/project/src/chroma_db`
-   - `GEMINI_API_KEY` = Your Gemini API key
+   - `GEMINI_API_KEY` = Your Gemini API key (get from [Google AI Studio](https://makersuite.google.com/app/apikey))
    - `GEMINI_MODEL` = `gemini-2.0-flash-exp` (optional, this is the default)
    - `OPENAI_API_KEY` = Your OpenAI API key (optional, for fallback)
 
 6. **Add Persistent Disk** (for ChromaDB):
-   - Go to **"Disks"** tab
+   > 📖 **See [RENDER_SETUP_GUIDE.md](./RENDER_SETUP_GUIDE.md) Section 3 for detailed instructions**
+   
+   - Go to **"Disks"** tab in your web service
    - Click **"Add Disk"**
    - Name: `chromadb-storage`
    - Mount Path: `/opt/render/project/src/chroma_db`
    - Size: 1 GB (minimum)
+   - ⚠️ **Important**: After adding disk, redeploy your service for it to mount
 
 7. Click **"Create Web Service"**
 

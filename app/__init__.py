@@ -79,6 +79,27 @@ def create_app(config_name=None):
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     
+    # Auto-initialize database tables on startup (safe - only creates if they don't exist)
+    # This runs when the app is created, before any requests
+    with app.app_context():
+        try:
+            from app.utils.database import DatabaseManager
+            from sqlalchemy import inspect
+            
+            db_manager = DatabaseManager()
+            inspector = inspect(db_manager.engine)
+            existing_tables = inspector.get_table_names()
+            
+            if not existing_tables:
+                # No tables exist, create them
+                db_manager.create_all_tables()
+                app.logger.info("✅ Database tables created on startup")
+            else:
+                app.logger.info(f"✅ Database tables already exist: {len(existing_tables)} tables found")
+        except Exception as e:
+            # Log warning but don't fail - tables might already exist or DB might not be ready yet
+            app.logger.warning(f"Database initialization check: {e} (this is OK if tables already exist)")
+    
     # Register blueprints
     from app.api import contacts, notes, auth
     app.register_blueprint(auth.auth_bp, url_prefix='/api/auth')

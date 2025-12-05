@@ -90,8 +90,8 @@ Scroll to **"Environment Variables"** section and click **"Add Environment Varia
    - Value: Generate a secure random key:
      - Open terminal and run: `python -c "import secrets; print(secrets.token_hex(32))"`
      - Copy the output (64 character hex string)
-     - Paste as the value
-
+     - Paste as the value - da5709ddf4f3bb9dcc6cca502ff4bb97a41e6821796c95c4dea7d792c3edf379
+     
 3. **DATABASE_URL**
    - Key: `DATABASE_URL`
    - Value: Paste the **Internal Database URL** you copied from Step 1.4

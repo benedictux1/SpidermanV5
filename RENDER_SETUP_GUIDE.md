@@ -164,8 +164,10 @@ Fill in:
 In the shell, run:
 
 ```bash
-python init_db.py --create-admin --username admin --password YourSecurePassword123
+python init_db.py --create-admin --username admin --password 123
 ```
+
+
 
 **Replace `YourSecurePassword123` with a strong password of your choice!**
 

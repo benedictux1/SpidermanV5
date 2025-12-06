@@ -25,7 +25,10 @@ def get_database_url():
     if database_url:
         # Render.com provides postgres:// but SQLAlchemy needs postgresql://
         if database_url.startswith('postgres://'):
-            database_url = database_url.replace('postgres://', 'postgresql://', 1)
+            database_url = database_url.replace('postgres://', 'postgresql+psycopg://', 1)
+        # If already postgresql://, ensure it uses psycopg driver
+        elif database_url.startswith('postgresql://') and '+psycopg' not in database_url:
+            database_url = database_url.replace('postgresql://', 'postgresql+psycopg://', 1)
         return database_url
     else:
         # Development: use SQLite

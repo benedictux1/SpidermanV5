@@ -33,6 +33,20 @@ def get_user_id():
     # For guest mode: get first user or create one
     db_manager = DatabaseManager()
     try:
+        # Ensure tables exist first (fallback if startup initialization failed)
+        try:
+            from sqlalchemy import inspect
+            inspector = inspect(db_manager.engine)
+            existing_tables = inspector.get_table_names()
+            if 'users' not in existing_tables:
+                logger.warning("Users table doesn't exist! Creating all tables now...")
+                # Import models first
+                from app.models import User, Contact, RawNote, SynthesizedEntry
+                db_manager.create_all_tables()
+                logger.info("✅ Tables created on-demand")
+        except Exception as table_check_error:
+            logger.warning(f"Could not check/create tables: {table_check_error}")
+        
         with db_manager.get_session() as session:
             from app.models import User
             from werkzeug.security import generate_password_hash

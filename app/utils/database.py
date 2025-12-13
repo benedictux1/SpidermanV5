@@ -81,7 +81,20 @@ class DatabaseManager:
             session.close()
     
     def create_all_tables(self):
-        """Create all database tables"""
-        Base.metadata.create_all(bind=self.engine)
-        logger.info("Database tables created")
+        """Create all database tables - IMPORTANT: All models must be imported first"""
+        # Import all models to ensure they register with Base.metadata
+        try:
+            from app.models import User, Contact, RawNote, SynthesizedEntry
+            logger.debug("All models imported successfully")
+        except ImportError as e:
+            logger.error(f"Failed to import models: {e}")
+            raise
+        
+        # Now create all tables
+        try:
+            Base.metadata.create_all(bind=self.engine)
+            logger.info("✅ Database tables created successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to create database tables: {e}", exc_info=True)
+            raise
 

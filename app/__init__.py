@@ -86,19 +86,37 @@ def create_app(config_name=None):
     # This runs when the app is created, before any requests
     with app.app_context():
         try:
+            # IMPORTANT: Import all models first so they register with Base.metadata
+            from app.models import User, Contact, RawNote, SynthesizedEntry
+            
             from app.utils.database import DatabaseManager
             from sqlalchemy import inspect
             
             db_manager = DatabaseManager()
-            inspector = inspect(db_manager.engine)
-            existing_tables = inspector.get_table_names()
             
-            if not existing_tables:
-                # No tables exist, create them
-                db_manager.create_all_tables()
-                app.logger.info("✅ Database tables created on startup")
+            # Check if tables exist
+            try:
+                inspector = inspect(db_manager.engine)
+                existing_tables = inspector.get_table_names()
+                app.logger.info(f"Found {len(existing_tables)} existing tables: {existing_tables}")
+            except Exception as inspect_error:
+                app.logger.warning(f"Could not inspect tables (might not exist yet): {inspect_error}")
+                existing_tables = []
+            
+            # Check if required tables exist
+            required_tables = ['users', 'contacts', 'raw_notes', 'synthesized_entries']
+            missing_tables = [t for t in required_tables if t not in existing_tables]
+            
+            if missing_tables:
+                app.logger.warning(f"Missing tables: {missing_tables}. Creating all tables...")
+                try:
+                    db_manager.create_all_tables()
+                    app.logger.info("✅ Database tables created on startup")
+                except Exception as create_error:
+                    app.logger.error(f"❌ Failed to create tables: {create_error}", exc_info=True)
+                    # Don't fail app startup, but log the error
             else:
-                app.logger.info(f"✅ Database tables already exist: {len(existing_tables)} tables found")
+                app.logger.info(f"✅ All required database tables exist ({len(existing_tables)} tables)")
             
             # Ensure at least one user exists (for open access mode)
             try:

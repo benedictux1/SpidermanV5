@@ -94,10 +94,19 @@ Categorize the content into these categories (only include if relevant):
 CATEGORY_DEFINITIONS:
 {CATEGORY_DEFINITIONS}
 
+CRITICAL: UNDERSTAND HIERARCHICAL STRUCTURE
+- When a header/title is followed by bullet points or a list, ALL items in that list inherit the context of the header
+- Example: "Hobbies\n- Cooking\n- Doing work" means BOTH "Cooking" AND "Doing work" are hobbies (Avocation category)
+- Example: "Goals\n- Learn Spanish\n- Travel to Japan" means BOTH are goals
+- Example: "Interests\n- Reading\n- Music" means BOTH are interests (Avocation)
+- Do NOT categorize items under a header separately - they all belong to the same category as the header
+
 EXAMPLES FOR CLARITY:
+- "Hobbies\n- Cooking\n- Doing work" → ALL should be "Avocation" (both cooking and doing work are hobbies in this context)
 - "Hobbies: Cooking, Reading" → Should be categorized as "Avocation" (not "Others")
 - "Likes playing guitar and painting" → Should be categorized as "Avocation"
-- "Enjoys cooking and doing work" → "Cooking" goes to "Avocation", "doing work" might be "Professional_Background" or "Actionable"
+- "Goals\n- Learn coding\n- Start business" → ALL should be "Goals"
+- "Interests\n- Photography\n- Travel" → ALL should be "Avocation"
 
 Return a JSON response with this structure:
 {{
@@ -196,6 +205,13 @@ IMPORTANT FORMATTING RULES:
 - If the input has categories, sections, or lists, maintain that hierarchy in the extracted content
 - Do NOT flatten structured content into a single paragraph - preserve lists, sections, and formatting
 
+CRITICAL: UNDERSTAND HIERARCHICAL STRUCTURE
+- When a header/title is followed by bullet points or a list, ALL items in that list inherit the context of the header
+- Example: "Hobbies\n- Cooking\n- Doing work" means BOTH "Cooking" AND "Doing work" are hobbies (Avocation category)
+- Example: "Goals\n- Learn Spanish\n- Travel" means BOTH are goals
+- Example: "Interests\n- Reading\n- Music" means BOTH are interests (Avocation)
+- Do NOT categorize items under a header separately - they all belong to the same category as the header
+
 CRITICAL CATEGORIZATION RULE:
 - **Do NOT include "Others" category if ANY other category is present. "Others" should ONLY be used when the note truly does not fit into any of the main categories above. If you categorize the note into any main category (Actionable, Goals, Social, etc.), you must NOT also include "Others".**
 
@@ -258,26 +274,71 @@ Return ONLY the JSON response."""
         content_lower = content.lower()
         categories = {}
         
-        # Check for goals
-        if any(word in content_lower for word in ['goal', 'goals', 'want', 'wants', 'plan', 'plans', 'aspire', 'aspires', 'hope', 'hopes', 'aim', 'aims', 'objective', 'objectives']):
-            categories['Goals'] = {'content': content[:200], 'confidence': 0.5}
+        # Check for hierarchical structure (header followed by bullets)
+        lines = content.split('\n')
+        header = None
+        bullet_items = []
         
-        # Check for actionable items
-        if any(word in content_lower for word in ['task', 'tasks', 'todo', 'todos', 'remind', 'reminder', 'follow', 'follow-up', 'call', 'meet', 'meeting', 'schedule']):
-            categories['Actionable'] = {'content': content[:200], 'confidence': 0.5}
+        # Look for header pattern (first line, possibly followed by bullets)
+        if len(lines) > 0:
+            first_line = lines[0].strip()
+            # Check if first line looks like a header (short, no bullets, might be a category name)
+            if first_line and not first_line.startswith('-') and len(first_line.split()) <= 5:
+                header = first_line.lower()
+                # Check if subsequent lines are bullets
+                for line in lines[1:]:
+                    line_stripped = line.strip()
+                    if line_stripped.startswith('-') or line_stripped.startswith('•'):
+                        bullet_items.append(line_stripped.lstrip('- •').strip())
         
-        # Check for interests/hobbies (Avocation) - IMPROVED KEYWORD MATCHING
-        avocation_keywords = [
-            'hobby', 'hobbies', 'interest', 'interests', 'interested', 'like', 'likes', 'love', 'loves', 
-            'enjoy', 'enjoys', 'passion', 'passions', 'favorite', 'favourite', 'favorites', 'favourites',
-            'cooking', 'baking', 'reading', 'writing', 'music', 'art', 'painting', 'drawing', 'photography',
-            'gardening', 'travel', 'sports', 'fitness', 'exercise', 'gaming', 'games', 'collecting', 'collection',
-            'craft', 'crafts', 'sewing', 'knitting', 'woodworking', 'dancing', 'singing', 'playing', 'instrument',
-            'recreational', 'leisure', 'pastime', 'pastimes', 'activity', 'activities'
-        ]
-        if any(word in content_lower for word in avocation_keywords):
-            categories['Avocation'] = {'content': content[:200], 'confidence': 0.6}
-            logger.info(f"Fallback detected Avocation keywords in: {content[:50]}...")
+        # If we found a header with bullets, categorize based on header
+        if header and bullet_items:
+            logger.info(f"Detected hierarchical structure: header='{header}', items={bullet_items}")
+            
+            # Combine header and all bullet items for categorization
+            combined_text = f"{header} {' '.join(bullet_items)}"
+            combined_lower = combined_text.lower()
+            
+            # Check header keywords
+            if any(word in header for word in ['hobby', 'hobbies', 'interest', 'interests', 'like', 'likes', 'enjoy', 'passion']):
+                # All items under "Hobbies" or "Interests" are Avocation
+                all_items = f"{header}\n" + "\n".join([f"- {item}" for item in bullet_items])
+                categories['Avocation'] = {'content': all_items, 'confidence': 0.7}
+                logger.info(f"Fallback: Detected '{header}' header - categorizing all items as Avocation")
+            elif any(word in header for word in ['goal', 'goals', 'want', 'plan', 'aspire', 'hope', 'aim']):
+                all_items = f"{header}\n" + "\n".join([f"- {item}" for item in bullet_items])
+                categories['Goals'] = {'content': all_items, 'confidence': 0.7}
+                logger.info(f"Fallback: Detected '{header}' header - categorizing all items as Goals")
+            elif any(word in header for word in ['task', 'todo', 'remind', 'action', 'follow']):
+                all_items = f"{header}\n" + "\n".join([f"- {item}" for item in bullet_items])
+                categories['Actionable'] = {'content': all_items, 'confidence': 0.7}
+                logger.info(f"Fallback: Detected '{header}' header - categorizing all items as Actionable")
+            else:
+                # Header not recognized, fall through to regular keyword matching
+                content_lower = combined_lower
+        
+        # Regular keyword matching (if no hierarchical structure detected or header not recognized)
+        if not categories:
+            # Check for goals
+            if any(word in content_lower for word in ['goal', 'goals', 'want', 'wants', 'plan', 'plans', 'aspire', 'aspires', 'hope', 'hopes', 'aim', 'aims', 'objective', 'objectives']):
+                categories['Goals'] = {'content': content[:200], 'confidence': 0.5}
+            
+            # Check for actionable items
+            if any(word in content_lower for word in ['task', 'tasks', 'todo', 'todos', 'remind', 'reminder', 'follow', 'follow-up', 'call', 'meet', 'meeting', 'schedule']):
+                categories['Actionable'] = {'content': content[:200], 'confidence': 0.5}
+            
+            # Check for interests/hobbies (Avocation) - IMPROVED KEYWORD MATCHING
+            avocation_keywords = [
+                'hobby', 'hobbies', 'interest', 'interests', 'interested', 'like', 'likes', 'love', 'loves', 
+                'enjoy', 'enjoys', 'passion', 'passions', 'favorite', 'favourite', 'favorites', 'favourites',
+                'cooking', 'baking', 'reading', 'writing', 'music', 'art', 'painting', 'drawing', 'photography',
+                'gardening', 'travel', 'sports', 'fitness', 'exercise', 'gaming', 'games', 'collecting', 'collection',
+                'craft', 'crafts', 'sewing', 'knitting', 'woodworking', 'dancing', 'singing', 'playing', 'instrument',
+                'recreational', 'leisure', 'pastime', 'pastimes', 'activity', 'activities'
+            ]
+            if any(word in content_lower for word in avocation_keywords):
+                categories['Avocation'] = {'content': content[:200], 'confidence': 0.6}
+                logger.info(f"Fallback detected Avocation keywords in: {content[:50]}...")
         
         if not categories:
             categories['Others'] = {'content': content[:200], 'confidence': 0.3}

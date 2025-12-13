@@ -14,11 +14,21 @@ logger = logging.getLogger(__name__)
 
 contacts_bp = Blueprint('contacts', __name__)
 
+# Cache for default user ID to avoid repeated database queries
+_default_user_id = None
+
 
 def get_user_id():
     """Get user ID - use current user if authenticated, otherwise get or create default user"""
+    global _default_user_id
+    
     if current_user.is_authenticated:
         return current_user.id
+    
+    # Use cached user ID if available
+    if _default_user_id is not None:
+        logger.debug(f"Using cached default user_id={_default_user_id}")
+        return _default_user_id
     
     # For guest mode: get first user or create one
     db_manager = DatabaseManager()
@@ -41,10 +51,12 @@ def get_user_id():
                         role='user'
                     )
                     session.add(guest_user)
-                    session.flush()  # Get the ID without committing yet
+                    # Flush to get the ID, but don't commit yet (context manager will commit)
+                    session.flush()
                     user_id = guest_user.id
-                    session.commit()  # Now commit
                     logger.info(f"✅ Created default guest user with id={user_id}")
+                    # Cache it
+                    _default_user_id = user_id
                     return user_id
                 except Exception as create_error:
                     # If 'guest' username already exists, try a different one
@@ -61,12 +73,13 @@ def get_user_id():
                     session.add(guest_user)
                     session.flush()
                     user_id = guest_user.id
-                    session.commit()
                     logger.info(f"✅ Created default guest user with id={user_id} (username={unique_username})")
+                    _default_user_id = user_id
                     return user_id
             else:
                 # User exists, use its ID
-                logger.debug(f"Using existing user with id={user.id}")
+                logger.info(f"Using existing user with id={user.id}, username={user.username}")
+                _default_user_id = user.id
                 return user.id
                 
     except Exception as e:
@@ -78,9 +91,10 @@ def get_user_id():
                 any_user = session.query(User).first()
                 if any_user:
                     logger.warning(f"Fallback: Using user id={any_user.id}")
+                    _default_user_id = any_user.id
                     return any_user.id
-        except:
-            pass
+        except Exception as fallback_error:
+            logger.error(f"Fallback also failed: {fallback_error}", exc_info=True)
         
         # If all else fails, raise an error with helpful message
         raise Exception(f"Could not get or create a user. Database error: {e}")
@@ -91,6 +105,8 @@ def create_contact():
     """Create a new contact"""
     try:
         data = request.get_json()
+        logger.info(f"Create contact request: {data}")
+        
         if not data or not data.get('full_name'):
             return jsonify({'error': 'Full name is required'}), 400
         
@@ -106,6 +122,7 @@ def create_contact():
         # Get user_id - this will create a user if needed
         try:
             user_id = get_user_id()
+            logger.info(f"Using user_id={user_id} for contact creation")
         except Exception as user_error:
             current_app.logger.error(f"Failed to get user_id: {user_error}", exc_info=True)
             return jsonify({
@@ -113,6 +130,27 @@ def create_contact():
                 'details': str(user_error)
             }), 500
         
+        # Verify user exists before creating contact
+        try:
+            db_manager = DatabaseManager()
+            with db_manager.get_session() as session:
+                from app.models import User
+                verify_user = session.query(User).filter(User.id == user_id).first()
+                if not verify_user:
+                    logger.error(f"User {user_id} does not exist in database!")
+                    return jsonify({
+                        'error': f'Database error: User {user_id} does not exist',
+                        'details': 'The user account was not found. Please try again.'
+                    }), 500
+                logger.info(f"Verified user {user_id} exists (username={verify_user.username})")
+        except Exception as verify_error:
+            logger.error(f"Error verifying user: {verify_error}", exc_info=True)
+            return jsonify({
+                'error': 'Database error: Could not verify user account',
+                'details': str(verify_error)
+            }), 500
+        
+        # Create the contact
         contact_service = ContactService()
         contact = contact_service.create_contact(
             user_id=user_id,
@@ -125,6 +163,8 @@ def create_contact():
         contact_name = contact.full_name
         contact_tier = contact.tier
         
+        logger.info(f"✅ Successfully created contact id={contact_id}, name={contact_name}, tier={contact_tier}")
+        
         return jsonify({
             'id': contact_id,
             'full_name': contact_name,
@@ -134,16 +174,22 @@ def create_contact():
         
     except Exception as e:
         current_app.logger.error(f"Error creating contact: {e}", exc_info=True)
+        import traceback
+        error_traceback = traceback.format_exc()
+        current_app.logger.error(f"Full traceback: {error_traceback}")
+        
         # Return more detailed error for debugging
         error_message = str(e)
         if 'foreign key constraint' in error_message.lower() or 'user_id' in error_message.lower():
             return jsonify({
                 'error': 'Database error: User does not exist. Please ensure a default user is created.',
-                'details': error_message
+                'details': error_message,
+                'traceback': error_traceback if current_app.config.get('DEBUG') else None
             }), 500
         return jsonify({
             'error': 'Failed to create contact',
-            'details': error_message
+            'details': error_message,
+            'traceback': error_traceback if current_app.config.get('DEBUG') else None
         }), 500
 
 
@@ -151,43 +197,44 @@ def create_contact():
 def get_contacts():
     """Get all contacts for current user"""
     try:
+        user_id = get_user_id()
+        logger.debug(f"Getting contacts for user_id={user_id}")
         contact_service = ContactService()
-        contacts = contact_service.get_all_contacts(get_user_id())
-        
-        # contacts is already a list of dicts from the service
+        contacts = contact_service.get_all_contacts(user_id)
+        logger.debug(f"Found {len(contacts)} contacts")
         return jsonify(contacts), 200
-        
     except Exception as e:
         current_app.logger.error(f"Error getting contacts: {e}", exc_info=True)
-        return jsonify({'error': 'Failed to retrieve contacts'}), 500
+        return jsonify({'error': 'Failed to retrieve contacts', 'details': str(e)}), 500
 
 
 @contacts_bp.route('/<int:contact_id>', methods=['GET'])
 def get_contact(contact_id):
     """Get contact details with categories"""
     try:
+        user_id = get_user_id()
         contact_service = ContactService()
-        result = contact_service.get_contact_with_categories(contact_id, get_user_id())
+        result = contact_service.get_contact_with_categories(contact_id, user_id)
         
         if not result:
             return jsonify({'error': 'Contact not found'}), 404
         
         return jsonify(result), 200
-        
     except Exception as e:
         current_app.logger.error(f"Error getting contact {contact_id}: {e}", exc_info=True)
-        return jsonify({'error': 'Failed to retrieve contact'}), 500
+        return jsonify({'error': 'Failed to retrieve contact', 'details': str(e)}), 500
 
 
 @contacts_bp.route('/<int:contact_id>/logs', methods=['GET'])
 def get_contact_logs(contact_id):
     """Get audit trail (raw notes and synthesized entries) for a contact"""
     try:
+        user_id = get_user_id()
         db_manager = DatabaseManager()
         with db_manager.get_session() as session:
             contact = session.query(Contact).filter(
                 Contact.id == contact_id,
-                Contact.user_id == get_user_id()
+                Contact.user_id == user_id
             ).first()
             
             if not contact:
@@ -237,8 +284,9 @@ def get_contact_logs(contact_id):
 def delete_contact(contact_id):
     """Delete a contact and all associated data (cascade delete)"""
     try:
+        user_id = get_user_id()
         contact_service = ContactService()
-        success = contact_service.delete_contact(contact_id, get_user_id())
+        success = contact_service.delete_contact(contact_id, user_id)
         
         if success:
             return jsonify({'message': 'Contact deleted successfully'}), 200
@@ -247,5 +295,4 @@ def delete_contact(contact_id):
             
     except Exception as e:
         current_app.logger.error(f"Error deleting contact {contact_id}: {e}", exc_info=True)
-        return jsonify({'error': 'Failed to delete contact'}), 500
-
+        return jsonify({'error': 'Failed to delete contact', 'details': str(e)}), 500

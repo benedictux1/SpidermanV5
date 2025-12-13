@@ -29,16 +29,33 @@ export async function apiRequest(endpoint, options = {}) {
         // Login disabled - don't redirect to login page
         // Just continue with the response
         
-        const data = await response.json();
+        let data;
+        try {
+            data = await response.json();
+        } catch (jsonError) {
+            // If response is not JSON, create error object
+            const text = await response.text();
+            throw new Error(`Server error: ${text || response.statusText || 'Unknown error'}`);
+        }
         
         if (!response.ok) {
-            throw new Error(data.error || `HTTP error! status: ${response.status}`);
+            // Create error object with full details
+            const error = new Error(data.error || `HTTP error! status: ${response.status}`);
+            error.status = response.status;
+            error.details = data.details;
+            error.data = data;
+            throw error;
         }
         
         return data;
     } catch (error) {
         console.error('API request failed:', error);
-        throw error;
+        // If it's already our error object, re-throw it
+        if (error.status || error.details) {
+            throw error;
+        }
+        // Otherwise wrap it
+        throw new Error(error.message || 'Network error');
     }
 }
 

@@ -58,7 +58,18 @@ export async function createContact(fullName, tier = 2) {
         await loadContacts();
         return contact;
     } catch (error) {
-        showNotification(error.message || 'Failed to create contact', 'error');
+        // Extract error message from API response
+        let errorMessage = 'Failed to create contact';
+        if (error.message) {
+            errorMessage = error.message;
+        } else if (error.error) {
+            errorMessage = error.error;
+            if (error.details) {
+                errorMessage += `: ${error.details}`;
+            }
+        }
+        console.error('Create contact error:', error);
+        showNotification(errorMessage, 'error');
         throw error;
     } finally {
         hideLoading();

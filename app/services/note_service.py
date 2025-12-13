@@ -72,6 +72,13 @@ class NoteService:
                 analysis_result = self.ai_service._fallback_analysis(content, contact.full_name)
                 categories = analysis_result.get('categories', {})
             
+            # Post-process: Remove "Others" if any other category exists (safety check)
+            if 'Others' in categories:
+                other_categories = [k for k in categories.keys() if k != 'Others']
+                if other_categories:
+                    logger.info(f"Removing 'Others' category because other categories exist: {other_categories}")
+                    del categories['Others']
+            
             for category, data in categories.items():
                 content_text = data.get('content', '')
                 confidence = float(data.get('confidence', 0.0))

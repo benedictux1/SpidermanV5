@@ -106,6 +106,7 @@ NEGATIVE CONSTRAINTS (What NOT to do):
 - Do NOT categorize information into multiple categories if it clearly belongs to one
 - Do NOT include generic or vague statements that don't add value
 - Do NOT flatten structured content into a single paragraph - preserve lists, sections, and formatting
+- **CRITICAL: Do NOT include "Others" category if ANY other category is present. "Others" should ONLY be used when the note truly does not fit into any of the main categories above.**
 
 Return ONLY the JSON response."""
             
@@ -138,6 +139,9 @@ Return ONLY the JSON response."""
             result = json.loads(response_text.strip())
             if 'categories' not in result:
                 result = {'categories': result}
+            
+            # Post-process: Remove "Others" if any other category exists
+            result = self._remove_others_if_other_categories_exist(result)
             
             logger.info(f"Gemini analysis completed for {contact_name}")
             return result
@@ -173,6 +177,9 @@ IMPORTANT FORMATTING RULES:
 - Use markdown formatting (e.g., `- ` for bullet points, `**text**` for bold, line breaks with `\n`) to preserve the visual structure
 - If the input has categories, sections, or lists, maintain that hierarchy in the extracted content
 - Do NOT flatten structured content into a single paragraph - preserve lists, sections, and formatting
+
+CRITICAL CATEGORIZATION RULE:
+- **Do NOT include "Others" category if ANY other category is present. "Others" should ONLY be used when the note truly does not fit into any of the main categories above. If you categorize the note into any main category (Actionable, Goals, Social, etc.), you must NOT also include "Others".**
 
 Only include categories with relevant content. Be factual and precise."""
             
@@ -217,6 +224,9 @@ Return ONLY the JSON response."""
             if 'categories' not in result:
                 result = {'categories': result}
             
+            # Post-process: Remove "Others" if any other category exists
+            result = self._remove_others_if_other_categories_exist(result)
+            
             logger.info(f"OpenAI analysis completed for {contact_name}")
             return result
             
@@ -243,5 +253,25 @@ Return ONLY the JSON response."""
         if not categories:
             categories['Others'] = {'content': content[:200], 'confidence': 0.3}
         
-        return {'categories': categories}
+        result = {'categories': categories}
+        # Post-process: Remove "Others" if any other category exists
+        result = self._remove_others_if_other_categories_exist(result)
+        return result
+    
+    def _remove_others_if_other_categories_exist(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Remove 'Others' category if any other category exists"""
+        if 'categories' not in result:
+            return result
+        
+        categories = result['categories']
+        
+        # Check if "Others" exists and if there are other categories
+        if 'Others' in categories:
+            other_categories = [k for k in categories.keys() if k != 'Others']
+            if other_categories:
+                # Remove "Others" since other categories exist
+                del categories['Others']
+                logger.debug(f"Removed 'Others' category because other categories exist: {other_categories}")
+        
+        return result
 

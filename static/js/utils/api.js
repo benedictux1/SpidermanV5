@@ -26,11 +26,8 @@ export async function apiRequest(endpoint, options = {}) {
     try {
         const response = await fetch(url, config);
         
-        // Handle redirects (Flask-Login redirects to login)
-        if (response.redirected && response.url.includes('/login')) {
-            window.location.href = '/login';
-            return null;
-        }
+        // Login disabled - don't redirect to login page
+        // Just continue with the response
         
         const data = await response.json();
         

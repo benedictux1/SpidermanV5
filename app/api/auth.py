@@ -17,52 +17,18 @@ auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
-    """Handle user login - TEMPORARILY DISABLED"""
-    # Login is temporarily disabled
+    """Handle user login - DISABLED, returns success for compatibility"""
+    # Login is disabled - return success to allow app to work
     if request.is_json:
         return jsonify({
-            'error': 'Login is temporarily disabled. Please check back later.',
-            'status': 'maintenance'
-        }), 503
+            'success': True,
+            'message': 'Login disabled - app is open access',
+            'authenticated': True
+        }), 200
     
-    # Return maintenance page for web requests
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Login Temporarily Unavailable</title>
-        <style>
-            body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-                margin: 0;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-            }
-            .container {
-                text-align: center;
-                padding: 40px;
-                background: rgba(255, 255, 255, 0.1);
-                border-radius: 20px;
-                backdrop-filter: blur(10px);
-                max-width: 500px;
-            }
-            h1 { margin-top: 0; }
-            p { font-size: 18px; line-height: 1.6; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>🔒 Login Temporarily Unavailable</h1>
-            <p>Login functionality is currently disabled for maintenance.</p>
-            <p>Please check back later.</p>
-        </div>
-    </body>
-    </html>
-    """, 503
+    # Redirect to main app for web requests
+    from flask import redirect, url_for
+    return redirect(url_for('index'))
 
 
 @auth_bp.route('/logout', methods=['POST'])

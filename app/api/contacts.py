@@ -4,7 +4,7 @@ API endpoints for contact management
 """
 
 from flask import Blueprint, request, jsonify, current_app
-from flask_login import login_required, current_user
+from flask_login import current_user
 from app.services.contact_service import ContactService
 from app.utils.database import DatabaseManager
 from app.models import Contact, RawNote, SynthesizedEntry
@@ -15,8 +15,15 @@ logger = logging.getLogger(__name__)
 contacts_bp = Blueprint('contacts', __name__)
 
 
+def get_user_id():
+    """Get user ID - use current user if authenticated, otherwise default to 1"""
+    if current_user.is_authenticated:
+        return current_user.id
+    # Default to user_id 1 if no authentication
+    return 1
+
+
 @contacts_bp.route('/', methods=['POST'])
-@login_required
 def create_contact():
     """Create a new contact"""
     try:
@@ -35,7 +42,7 @@ def create_contact():
         
         contact_service = ContactService()
         contact = contact_service.create_contact(
-            user_id=current_user.id,
+            user_id=get_user_id(),
             full_name=full_name,
             tier=tier
         )
@@ -58,12 +65,11 @@ def create_contact():
 
 
 @contacts_bp.route('/', methods=['GET'])
-@login_required
 def get_contacts():
     """Get all contacts for current user"""
     try:
         contact_service = ContactService()
-        contacts = contact_service.get_all_contacts(current_user.id)
+        contacts = contact_service.get_all_contacts(get_user_id())
         
         # contacts is already a list of dicts from the service
         return jsonify(contacts), 200
@@ -74,12 +80,11 @@ def get_contacts():
 
 
 @contacts_bp.route('/<int:contact_id>', methods=['GET'])
-@login_required
 def get_contact(contact_id):
     """Get contact details with categories"""
     try:
         contact_service = ContactService()
-        result = contact_service.get_contact_with_categories(contact_id, current_user.id)
+        result = contact_service.get_contact_with_categories(contact_id, get_user_id())
         
         if not result:
             return jsonify({'error': 'Contact not found'}), 404
@@ -92,7 +97,6 @@ def get_contact(contact_id):
 
 
 @contacts_bp.route('/<int:contact_id>/logs', methods=['GET'])
-@login_required
 def get_contact_logs(contact_id):
     """Get audit trail (raw notes and synthesized entries) for a contact"""
     try:
@@ -100,7 +104,7 @@ def get_contact_logs(contact_id):
         with db_manager.get_session() as session:
             contact = session.query(Contact).filter(
                 Contact.id == contact_id,
-                Contact.user_id == current_user.id
+                Contact.user_id == get_user_id()
             ).first()
             
             if not contact:
@@ -147,12 +151,11 @@ def get_contact_logs(contact_id):
 
 
 @contacts_bp.route('/<int:contact_id>', methods=['DELETE'])
-@login_required
 def delete_contact(contact_id):
     """Delete a contact and all associated data (cascade delete)"""
     try:
         contact_service = ContactService()
-        success = contact_service.delete_contact(contact_id, current_user.id)
+        success = contact_service.delete_contact(contact_id, get_user_id())
         
         if success:
             return jsonify({'message': 'Contact deleted successfully'}), 200

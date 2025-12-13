@@ -4,7 +4,7 @@ API endpoints for note processing and analysis
 """
 
 from flask import Blueprint, request, jsonify, current_app
-from flask_login import login_required, current_user
+from flask_login import current_user
 from app.services.note_service import NoteService
 import logging
 
@@ -13,8 +13,15 @@ logger = logging.getLogger(__name__)
 notes_bp = Blueprint('notes', __name__)
 
 
+def get_user_id():
+    """Get user ID - use current user if authenticated, otherwise default to 1"""
+    if current_user.is_authenticated:
+        return current_user.id
+    # Default to user_id 1 if no authentication
+    return 1
+
+
 @notes_bp.route('/process-note', methods=['POST'])
-@login_required
 def process_note():
     """Process a note with AI analysis"""
     try:
@@ -40,7 +47,7 @@ def process_note():
         result = note_service.process_note(
             contact_id=contact_id,
             content=raw_note_text.strip(),
-            user_id=current_user.id
+            user_id=get_user_id()
         )
         
         return jsonify(result), 200
@@ -53,12 +60,11 @@ def process_note():
 
 
 @notes_bp.route('/contact/<int:contact_id>', methods=['GET'])
-@login_required
 def get_notes(contact_id):
     """Get all notes for a contact"""
     try:
         note_service = NoteService()
-        result = note_service.get_notes_for_contact(contact_id, current_user.id)
+        result = note_service.get_notes_for_contact(contact_id, get_user_id())
         return jsonify(result), 200
         
     except ValueError as e:

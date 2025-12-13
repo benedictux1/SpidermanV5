@@ -8,18 +8,32 @@ import { showNotification, showLoading, hideLoading } from './utils/ui.js';
 import { loadContacts, createContact, showContactDetail, showContactsList, deleteContact, currentContactId } from './modules/contacts.js';
 import { processNote, clearAnalysisResults } from './modules/notes.js';
 
-// Check authentication on load
+// Check authentication on load (optional - login disabled)
 async function checkAuth() {
     try {
         const auth = await get('/auth/check');
         if (auth.authenticated) {
-            document.getElementById('current-user').textContent = `Logged in as ${auth.user.username}`;
-            await loadContacts();
+            const userElement = document.getElementById('current-user');
+            if (userElement) {
+                userElement.textContent = `Logged in as ${auth.user.username}`;
+            }
         } else {
-            window.location.href = '/login';
+            // Login disabled - show as guest user
+            const userElement = document.getElementById('current-user');
+            if (userElement) {
+                userElement.textContent = 'Guest Mode';
+            }
         }
+        // Always load contacts (login disabled)
+        await loadContacts();
     } catch (error) {
-        window.location.href = '/login';
+        // Login disabled - continue anyway
+        console.log('Auth check failed, continuing in guest mode:', error);
+        const userElement = document.getElementById('current-user');
+        if (userElement) {
+            userElement.textContent = 'Guest Mode';
+        }
+        await loadContacts();
     }
 }
 
@@ -30,18 +44,11 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function setupEventHandlers() {
-    // Logout button
+    // Logout button (disabled - login disabled)
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) {
-        logoutBtn.addEventListener('click', async () => {
-            try {
-                await post('/auth/logout', {});
-                window.location.href = '/login';
-            } catch (error) {
-                console.error('Logout error:', error);
-                window.location.href = '/login';
-            }
-        });
+        // Hide logout button since login is disabled
+        logoutBtn.style.display = 'none';
     }
     
     // Create contact button

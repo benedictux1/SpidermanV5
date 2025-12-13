@@ -133,48 +133,12 @@ def create_app(config_name=None):
                 'timestamp': __import__('datetime').datetime.utcnow().isoformat()
             }, 503
     
-    # Login route (redirect to auth blueprint) - TEMPORARILY DISABLED
+    # Login route - redirect to main app (login disabled)
     @app.route('/login')
     def login_route():
-        """Login page route - TEMPORARILY DISABLED"""
-        # Login is temporarily disabled
-        return """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Login Temporarily Unavailable</title>
-            <style>
-                body {
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    height: 100vh;
-                    margin: 0;
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white;
-                }
-                .container {
-                    text-align: center;
-                    padding: 40px;
-                    background: rgba(255, 255, 255, 0.1);
-                    border-radius: 20px;
-                    backdrop-filter: blur(10px);
-                    max-width: 500px;
-                }
-                h1 { margin-top: 0; }
-                p { font-size: 18px; line-height: 1.6; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>🔒 Login Temporarily Unavailable</h1>
-                <p>Login functionality is currently disabled for maintenance.</p>
-                <p>Please check back later.</p>
-            </div>
-        </body>
-        </html>
-        """, 503
+        """Login page route - redirects to main app"""
+        from flask import redirect, url_for
+        return redirect(url_for('index'))
     
     # Main route - serve SPA
     @app.route('/')

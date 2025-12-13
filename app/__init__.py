@@ -99,6 +99,42 @@ def create_app(config_name=None):
                 app.logger.info("✅ Database tables created on startup")
             else:
                 app.logger.info(f"✅ Database tables already exist: {len(existing_tables)} tables found")
+            
+            # Ensure default guest user exists (for open access mode)
+            try:
+                from app.models import User
+                from werkzeug.security import generate_password_hash
+                with db_manager.get_session() as session:
+                    default_user = session.query(User).filter(User.id == 1).first()
+                    if not default_user:
+                        # Try to create user with id=1
+                        try:
+                            guest_user = User(
+                                id=1,
+                                username='guest',
+                                password_hash=generate_password_hash('guest'),
+                                role='user'
+                            )
+                            session.add(guest_user)
+                            session.commit()
+                            app.logger.info("✅ Created default guest user (id=1)")
+                        except Exception as e:
+                            # If id=1 fails (maybe auto-increment), create without specifying id
+                            app.logger.warning(f"Could not create user with id=1: {e}, trying without id")
+                            session.rollback()
+                            guest_user = User(
+                                username='guest',
+                                password_hash=generate_password_hash('guest'),
+                                role='user'
+                            )
+                            session.add(guest_user)
+                            session.commit()
+                            app.logger.info(f"✅ Created default guest user (id={guest_user.id})")
+                    else:
+                        app.logger.info(f"✅ Default guest user already exists (id={default_user.id})")
+            except Exception as e:
+                app.logger.warning(f"Could not ensure default user exists: {e}")
+                
         except Exception as e:
             # Log warning but don't fail - tables might already exist or DB might not be ready yet
             app.logger.warning(f"Database initialization check: {e} (this is OK if tables already exist)")

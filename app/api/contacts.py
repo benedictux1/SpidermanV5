@@ -16,11 +16,46 @@ contacts_bp = Blueprint('contacts', __name__)
 
 
 def get_user_id():
-    """Get user ID - use current user if authenticated, otherwise default to 1"""
+    """Get user ID - use current user if authenticated, otherwise ensure default user exists"""
     if current_user.is_authenticated:
         return current_user.id
-    # Default to user_id 1 if no authentication
-    return 1
+    
+    # Default to user_id 1 if no authentication - ensure it exists
+    try:
+        db_manager = DatabaseManager()
+        with db_manager.get_session() as session:
+            from app.models import User
+            user = session.query(User).filter(User.id == 1).first()
+            if not user:
+                # Create default guest user
+                from werkzeug.security import generate_password_hash
+                default_user = User(
+                    username='guest',
+                    password_hash=generate_password_hash('guest'),
+                    role='user'
+                )
+                session.add(default_user)
+                session.flush()  # Get the ID
+                # If we got ID 1, great. If not, use whatever ID we got
+                user_id = default_user.id
+                session.commit()
+                logger.info(f"Created default guest user (id={user_id})")
+                return user_id
+            return 1
+    except Exception as e:
+        logger.error(f"Error ensuring default user exists: {e}", exc_info=True)
+        # Fallback: try to get first user or return 1 anyway
+        try:
+            db_manager = DatabaseManager()
+            with db_manager.get_session() as session:
+                from app.models import User
+                first_user = session.query(User).first()
+                if first_user:
+                    return first_user.id
+        except:
+            pass
+        # Last resort: return 1 and hope it exists
+        return 1
 
 
 @contacts_bp.route('/', methods=['POST'])
@@ -61,7 +96,17 @@ def create_contact():
         
     except Exception as e:
         current_app.logger.error(f"Error creating contact: {e}", exc_info=True)
-        return jsonify({'error': 'Failed to create contact'}), 500
+        # Return more detailed error for debugging
+        error_message = str(e)
+        if 'foreign key constraint' in error_message.lower() or 'user_id' in error_message.lower():
+            return jsonify({
+                'error': 'Database error: User does not exist. Please ensure a default user is created.',
+                'details': error_message
+            }), 500
+        return jsonify({
+            'error': 'Failed to create contact',
+            'details': error_message
+        }), 500
 
 
 @contacts_bp.route('/', methods=['GET'])

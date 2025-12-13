@@ -14,11 +14,29 @@ notes_bp = Blueprint('notes', __name__)
 
 
 def get_user_id():
-    """Get user ID - use current user if authenticated, otherwise default to 1"""
+    """Get user ID - use current user if authenticated, otherwise ensure default user exists"""
     if current_user.is_authenticated:
         return current_user.id
-    # Default to user_id 1 if no authentication
-    return 1
+    
+    # Default to user_id 1 if no authentication - ensure it exists
+    from app.utils.database import DatabaseManager
+    from app.models import User
+    db_manager = DatabaseManager()
+    with db_manager.get_session() as session:
+        user = session.query(User).filter(User.id == 1).first()
+        if not user:
+            # Create default guest user
+            from werkzeug.security import generate_password_hash
+            default_user = User(
+                id=1,
+                username='guest',
+                password_hash=generate_password_hash('guest'),
+                role='user'
+            )
+            session.add(default_user)
+            session.commit()
+            logger.info("Created default guest user (id=1)")
+        return 1
 
 
 @notes_bp.route('/process-note', methods=['POST'])

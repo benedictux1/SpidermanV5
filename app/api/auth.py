@@ -17,61 +17,52 @@ auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
-    """Handle user login"""
-    if request.method == 'GET':
-        if current_user.is_authenticated:
-            return redirect(url_for('index'))
-        return render_template('login.html')
+    """Handle user login - TEMPORARILY DISABLED"""
+    # Login is temporarily disabled
+    if request.is_json:
+        return jsonify({
+            'error': 'Login is temporarily disabled. Please check back later.',
+            'status': 'maintenance'
+        }), 503
     
-    try:
-        data = request.get_json() if request.is_json else request.form
-        
-        username = data.get('username', '').strip()
-        password = data.get('password', '')
-        
-        if not username or not password:
-            if request.is_json:
-                return jsonify({'error': 'Username and password are required'}), 400
-            return render_template('login.html', error='Username and password are required')
-        
-        db_manager = DatabaseManager()
-        with db_manager.get_session() as session:
-            user = session.query(User).filter(User.username == username).first()
-            
-            if user and check_password_hash(user.password_hash, password):
-                from flask_login import UserMixin
-                class AuthUser(UserMixin):
-                    def __init__(self, user):
-                        self.id = user.id
-                        self.username = user.username
-                        self.role = user.role
-                
-                auth_user = AuthUser(user)
-                login_user(auth_user, remember=True)
-                
-                if request.is_json:
-                    return jsonify({
-                        'success': True,
-                        'message': 'Login successful',
-                        'user': {
-                            'id': user.id,
-                            'username': user.username,
-                            'role': user.role
-                        }
-                    }), 200
-                else:
-                    return redirect(url_for('index'))
-            else:
-                logger.warning(f"Invalid login attempt for user: {username}")
-                if request.is_json:
-                    return jsonify({'error': 'Invalid credentials'}), 401
-                return render_template('login.html', error='Invalid credentials')
-                
-    except Exception as e:
-        logger.error(f"Login error: {e}", exc_info=True)
-        if request.is_json:
-            return jsonify({'error': 'Login failed'}), 500
-        return render_template('login.html', error='Login failed')
+    # Return maintenance page for web requests
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Login Temporarily Unavailable</title>
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+            }
+            .container {
+                text-align: center;
+                padding: 40px;
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 20px;
+                backdrop-filter: blur(10px);
+                max-width: 500px;
+            }
+            h1 { margin-top: 0; }
+            p { font-size: 18px; line-height: 1.6; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🔒 Login Temporarily Unavailable</h1>
+            <p>Login functionality is currently disabled for maintenance.</p>
+            <p>Please check back later.</p>
+        </div>
+    </body>
+    </html>
+    """, 503
 
 
 @auth_bp.route('/logout', methods=['POST'])

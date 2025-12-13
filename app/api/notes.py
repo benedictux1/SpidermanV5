@@ -14,29 +14,58 @@ notes_bp = Blueprint('notes', __name__)
 
 
 def get_user_id():
-    """Get user ID - use current user if authenticated, otherwise ensure default user exists"""
+    """Get user ID - use current user if authenticated, otherwise get or create default user"""
     if current_user.is_authenticated:
         return current_user.id
     
-    # Default to user_id 1 if no authentication - ensure it exists
+    # For guest mode: get first user or create one
     from app.utils.database import DatabaseManager
     from app.models import User
+    from werkzeug.security import generate_password_hash
+    
     db_manager = DatabaseManager()
-    with db_manager.get_session() as session:
-        user = session.query(User).filter(User.id == 1).first()
-        if not user:
-            # Create default guest user
-            from werkzeug.security import generate_password_hash
-            default_user = User(
-                id=1,
-                username='guest',
-                password_hash=generate_password_hash('guest'),
-                role='user'
-            )
-            session.add(default_user)
-            session.commit()
-            logger.info("Created default guest user (id=1)")
-        return 1
+    try:
+        with db_manager.get_session() as session:
+            # Try to get any existing user first
+            user = session.query(User).first()
+            
+            if not user:
+                # No users exist - create a default guest user
+                logger.info("No users found, creating default guest user...")
+                try:
+                    guest_user = User(
+                        username='guest',
+                        password_hash=generate_password_hash('guest'),
+                        role='user'
+                    )
+                    session.add(guest_user)
+                    session.flush()
+                    user_id = guest_user.id
+                    session.commit()
+                    logger.info(f"✅ Created default guest user with id={user_id}")
+                    return user_id
+                except Exception as create_error:
+                    logger.warning(f"Could not create 'guest' user: {create_error}")
+                    session.rollback()
+                    import time
+                    unique_username = f'guest_{int(time.time())}'
+                    guest_user = User(
+                        username=unique_username,
+                        password_hash=generate_password_hash('guest'),
+                        role='user'
+                    )
+                    session.add(guest_user)
+                    session.flush()
+                    user_id = guest_user.id
+                    session.commit()
+                    logger.info(f"✅ Created default guest user with id={user_id}")
+                    return user_id
+            else:
+                return user.id
+                
+    except Exception as e:
+        logger.error(f"Error getting/creating default user: {e}", exc_info=True)
+        raise Exception(f"Could not get or create a user. Database error: {e}")
 
 
 @notes_bp.route('/process-note', methods=['POST'])

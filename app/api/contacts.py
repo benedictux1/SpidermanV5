@@ -16,46 +16,74 @@ contacts_bp = Blueprint('contacts', __name__)
 
 
 def get_user_id():
-    """Get user ID - use current user if authenticated, otherwise ensure default user exists"""
+    """Get user ID - use current user if authenticated, otherwise get or create default user"""
     if current_user.is_authenticated:
         return current_user.id
     
-    # Default to user_id 1 if no authentication - ensure it exists
+    # For guest mode: get first user or create one
+    db_manager = DatabaseManager()
     try:
-        db_manager = DatabaseManager()
         with db_manager.get_session() as session:
             from app.models import User
-            user = session.query(User).filter(User.id == 1).first()
+            from werkzeug.security import generate_password_hash
+            
+            # Try to get any existing user first
+            user = session.query(User).first()
+            
             if not user:
-                # Create default guest user
-                from werkzeug.security import generate_password_hash
-                default_user = User(
-                    username='guest',
-                    password_hash=generate_password_hash('guest'),
-                    role='user'
-                )
-                session.add(default_user)
-                session.flush()  # Get the ID
-                # If we got ID 1, great. If not, use whatever ID we got
-                user_id = default_user.id
-                session.commit()
-                logger.info(f"Created default guest user (id={user_id})")
-                return user_id
-            return 1
+                # No users exist - create a default guest user
+                logger.info("No users found, creating default guest user...")
+                try:
+                    # Try to create with username 'guest'
+                    guest_user = User(
+                        username='guest',
+                        password_hash=generate_password_hash('guest'),
+                        role='user'
+                    )
+                    session.add(guest_user)
+                    session.flush()  # Get the ID without committing yet
+                    user_id = guest_user.id
+                    session.commit()  # Now commit
+                    logger.info(f"✅ Created default guest user with id={user_id}")
+                    return user_id
+                except Exception as create_error:
+                    # If 'guest' username already exists, try a different one
+                    logger.warning(f"Could not create 'guest' user: {create_error}")
+                    session.rollback()
+                    # Try with a unique username
+                    import time
+                    unique_username = f'guest_{int(time.time())}'
+                    guest_user = User(
+                        username=unique_username,
+                        password_hash=generate_password_hash('guest'),
+                        role='user'
+                    )
+                    session.add(guest_user)
+                    session.flush()
+                    user_id = guest_user.id
+                    session.commit()
+                    logger.info(f"✅ Created default guest user with id={user_id} (username={unique_username})")
+                    return user_id
+            else:
+                # User exists, use its ID
+                logger.debug(f"Using existing user with id={user.id}")
+                return user.id
+                
     except Exception as e:
-        logger.error(f"Error ensuring default user exists: {e}", exc_info=True)
-        # Fallback: try to get first user or return 1 anyway
+        logger.error(f"Error getting/creating default user: {e}", exc_info=True)
+        # Last resort: try to get any user one more time
         try:
-            db_manager = DatabaseManager()
             with db_manager.get_session() as session:
                 from app.models import User
-                first_user = session.query(User).first()
-                if first_user:
-                    return first_user.id
+                any_user = session.query(User).first()
+                if any_user:
+                    logger.warning(f"Fallback: Using user id={any_user.id}")
+                    return any_user.id
         except:
             pass
-        # Last resort: return 1 and hope it exists
-        return 1
+        
+        # If all else fails, raise an error with helpful message
+        raise Exception(f"Could not get or create a user. Database error: {e}")
 
 
 @contacts_bp.route('/', methods=['POST'])
@@ -75,9 +103,19 @@ def create_contact():
         if tier not in [1, 2, 3]:
             tier = 2
         
+        # Get user_id - this will create a user if needed
+        try:
+            user_id = get_user_id()
+        except Exception as user_error:
+            current_app.logger.error(f"Failed to get user_id: {user_error}", exc_info=True)
+            return jsonify({
+                'error': 'Database error: Could not get or create a user account',
+                'details': str(user_error)
+            }), 500
+        
         contact_service = ContactService()
         contact = contact_service.create_contact(
-            user_id=get_user_id(),
+            user_id=user_id,
             full_name=full_name,
             tier=tier
         )

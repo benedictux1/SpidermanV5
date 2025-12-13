@@ -100,38 +100,44 @@ def create_app(config_name=None):
             else:
                 app.logger.info(f"✅ Database tables already exist: {len(existing_tables)} tables found")
             
-            # Ensure default guest user exists (for open access mode)
+            # Ensure at least one user exists (for open access mode)
             try:
                 from app.models import User
                 from werkzeug.security import generate_password_hash
                 with db_manager.get_session() as session:
-                    default_user = session.query(User).filter(User.id == 1).first()
-                    if not default_user:
-                        # Try to create user with id=1
+                    # Check if any user exists
+                    any_user = session.query(User).first()
+                    if not any_user:
+                        # No users exist - create a default guest user
                         try:
                             guest_user = User(
-                                id=1,
                                 username='guest',
                                 password_hash=generate_password_hash('guest'),
                                 role='user'
                             )
                             session.add(guest_user)
+                            session.flush()  # Get the ID
+                            user_id = guest_user.id
                             session.commit()
-                            app.logger.info("✅ Created default guest user (id=1)")
+                            app.logger.info(f"✅ Created default guest user (id={user_id})")
                         except Exception as e:
-                            # If id=1 fails (maybe auto-increment), create without specifying id
-                            app.logger.warning(f"Could not create user with id=1: {e}, trying without id")
+                            # If 'guest' username already exists, try a different one
+                            app.logger.warning(f"Could not create 'guest' user: {e}")
                             session.rollback()
+                            import time
+                            unique_username = f'guest_{int(time.time())}'
                             guest_user = User(
-                                username='guest',
+                                username=unique_username,
                                 password_hash=generate_password_hash('guest'),
                                 role='user'
                             )
                             session.add(guest_user)
+                            session.flush()
+                            user_id = guest_user.id
                             session.commit()
-                            app.logger.info(f"✅ Created default guest user (id={guest_user.id})")
+                            app.logger.info(f"✅ Created default guest user (id={user_id}, username={unique_username})")
                     else:
-                        app.logger.info(f"✅ Default guest user already exists (id={default_user.id})")
+                        app.logger.info(f"✅ User already exists (id={any_user.id}, username={any_user.username})")
             except Exception as e:
                 app.logger.warning(f"Could not ensure default user exists: {e}")
                 

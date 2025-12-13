@@ -193,6 +193,33 @@ def create_app(config_name=None):
                 'timestamp': __import__('datetime').datetime.utcnow().isoformat()
             }, 503
     
+    # AI service health check endpoint
+    @app.route('/api/ai/status', methods=['GET'])
+    def ai_status():
+        """Check AI service configuration and availability"""
+        try:
+            from flask import jsonify
+            from app.services.ai_service import AIService
+            ai_service = AIService()
+            
+            status = {
+                'gemini_configured': bool(ai_service.gemini_api_key),
+                'openai_configured': bool(ai_service.openai_api_key),
+                'ai_available': bool(ai_service.gemini_api_key or ai_service.openai_api_key),
+                'gemini_model': ai_service.gemini_model if ai_service.gemini_api_key else None,
+                'using_fallback': not (ai_service.gemini_api_key or ai_service.openai_api_key),
+                'message': 'AI services configured' if (ai_service.gemini_api_key or ai_service.openai_api_key) else '⚠️ No AI API keys configured - using fallback keyword matching'
+            }
+            
+            return jsonify(status), 200
+        except Exception as e:
+            app.logger.error(f"AI status check failed: {e}")
+            from flask import jsonify
+            return jsonify({
+                'error': str(e),
+                'ai_available': False
+            }), 500
+    
     # Login route - redirect to main app (login disabled)
     @app.route('/login')
     def login_route():

@@ -19,7 +19,7 @@ CATEGORY_DEFINITIONS = """
 - Professional_Background: Detailed career history and occupational profile including employment timeline, educational credentials, skill inventory, achievement record.
 - Financial_Situation: Comprehensive portrait of their economic circumstances, money management approach, and financial outlook.
 - Wellbeing: Holistic health status encompassing physical, mental, emotional, and spiritual dimensions.
-- Avocation: Comprehensive inventory of non-professional interests, passions, and recreational activities.
+- Avocation: Comprehensive inventory of non-professional interests, passions, and recreational activities. This includes hobbies, leisure activities, creative pursuits, sports, games, collections, and any activities done for enjoyment outside of work (e.g., cooking, reading, gardening, music, art, travel, etc.).
 - Environment_And_Lifestyle: Detailed portrait of their daily living context and routine patterns.
 - Psychology_And_Values: In-depth profile of their mental frameworks, belief systems, and guiding principles.
 - Communication_Style: Comprehensive analysis of their interpersonal communication patterns and preferences across all contexts.
@@ -40,18 +40,31 @@ class AIService:
         
     def analyze_note(self, content: str, contact_name: str, context: Optional[str] = None) -> Dict[str, Any]:
         """Analyze note and extract structured categories"""
+        # Log which service will be used
+        if not self.gemini_api_key and not self.openai_api_key:
+            logger.warning("⚠️ No AI API keys configured - using fallback keyword matching")
+        elif self.gemini_api_key:
+            logger.info("🤖 Using Gemini AI for analysis")
+        elif self.openai_api_key:
+            logger.info("🤖 Using OpenAI AI for analysis")
+        
         if self.gemini_api_key:
             try:
-                return self._analyze_with_gemini(content, contact_name, context)
+                result = self._analyze_with_gemini(content, contact_name, context)
+                logger.info("✅ Gemini analysis successful")
+                return result
             except Exception as e:
                 logger.warning(f"Gemini analysis failed: {e}, trying OpenAI fallback")
         
         if self.openai_api_key:
             try:
-                return self._analyze_with_openai(content, contact_name, context)
+                result = self._analyze_with_openai(content, contact_name, context)
+                logger.info("✅ OpenAI analysis successful")
+                return result
             except Exception as e:
                 logger.warning(f"OpenAI analysis failed: {e}, using local fallback")
         
+        logger.warning("⚠️ Using fallback keyword matching (AI services unavailable)")
         return self._fallback_analysis(content, contact_name)
     
     def _analyze_with_gemini(self, content: str, contact_name: str, context: Optional[str] = None) -> Dict[str, Any]:
@@ -80,6 +93,11 @@ Categorize the content into these categories (only include if relevant):
 
 CATEGORY_DEFINITIONS:
 {CATEGORY_DEFINITIONS}
+
+EXAMPLES FOR CLARITY:
+- "Hobbies: Cooking, Reading" → Should be categorized as "Avocation" (not "Others")
+- "Likes playing guitar and painting" → Should be categorized as "Avocation"
+- "Enjoys cooking and doing work" → "Cooking" goes to "Avocation", "doing work" might be "Professional_Background" or "Actionable"
 
 Return a JSON response with this structure:
 {{
@@ -240,18 +258,30 @@ Return ONLY the JSON response."""
         content_lower = content.lower()
         categories = {}
         
-        if any(word in content_lower for word in ['goal', 'want', 'plan', 'aspire', 'hope', 'aim']):
+        # Check for goals
+        if any(word in content_lower for word in ['goal', 'goals', 'want', 'wants', 'plan', 'plans', 'aspire', 'aspires', 'hope', 'hopes', 'aim', 'aims', 'objective', 'objectives']):
             categories['Goals'] = {'content': content[:200], 'confidence': 0.5}
         
-        if any(word in content_lower for word in ['task', 'todo', 'remind', 'follow', 'call', 'meet']):
+        # Check for actionable items
+        if any(word in content_lower for word in ['task', 'tasks', 'todo', 'todos', 'remind', 'reminder', 'follow', 'follow-up', 'call', 'meet', 'meeting', 'schedule']):
             categories['Actionable'] = {'content': content[:200], 'confidence': 0.5}
         
-        # Check for interests/hobbies (Avocation)
-        if any(word in content_lower for word in ['like', 'likes', 'love', 'loves', 'enjoy', 'enjoys', 'hobby', 'interest', 'interested', 'passion', 'favorite', 'favourite']):
+        # Check for interests/hobbies (Avocation) - IMPROVED KEYWORD MATCHING
+        avocation_keywords = [
+            'hobby', 'hobbies', 'interest', 'interests', 'interested', 'like', 'likes', 'love', 'loves', 
+            'enjoy', 'enjoys', 'passion', 'passions', 'favorite', 'favourite', 'favorites', 'favourites',
+            'cooking', 'baking', 'reading', 'writing', 'music', 'art', 'painting', 'drawing', 'photography',
+            'gardening', 'travel', 'sports', 'fitness', 'exercise', 'gaming', 'games', 'collecting', 'collection',
+            'craft', 'crafts', 'sewing', 'knitting', 'woodworking', 'dancing', 'singing', 'playing', 'instrument',
+            'recreational', 'leisure', 'pastime', 'pastimes', 'activity', 'activities'
+        ]
+        if any(word in content_lower for word in avocation_keywords):
             categories['Avocation'] = {'content': content[:200], 'confidence': 0.6}
+            logger.info(f"Fallback detected Avocation keywords in: {content[:50]}...")
         
         if not categories:
             categories['Others'] = {'content': content[:200], 'confidence': 0.3}
+            logger.info("Fallback: No specific categories detected, using 'Others'")
         
         result = {'categories': categories}
         # Post-process: Remove "Others" if any other category exists

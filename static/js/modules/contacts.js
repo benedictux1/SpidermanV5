@@ -177,22 +177,190 @@ function renderCategories(categorizedData) {
         'Others'
     ];
     
-    // Render all categories, showing empty state for ones without data
+    // Render all categories with inline editing
     container.innerHTML = allCategories.map(category => {
         const items = categorizedData[category] || [];
         const hasData = items.length > 0;
+        const content = hasData ? items.map(item => item.content).join('\n\n') : '';
+        const entryId = hasData ? items[0].id : null;
         
         return `
-        <div class="category-group ${!hasData ? 'category-empty' : ''}">
-            <h4>${escapeHtml(category.replace(/_/g, ' '))}</h4>
-            ${hasData ? items.map(item => `
-                <div class="category-item">
-                    <div class="category-content">${renderMarkdown(item.content)}</div>
+        <div class="category-group ${!hasData ? 'category-empty' : ''}" data-category="${category}">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <h4>${escapeHtml(category.replace(/_/g, ' '))}</h4>
+                <button class="btn-edit-category btn btn-secondary btn-sm" data-category="${category}" style="padding: 0.25rem 0.75rem; font-size: 0.85rem; display: none;">
+                    ✏️ Edit
+                </button>
+            </div>
+            <div class="category-display" data-category="${category}">
+                ${hasData ? `
+                    <div class="category-content">${renderMarkdown(content)}</div>
+                ` : '<div class="category-empty-message">No entries yet. Click Edit to add content.</div>'}
+            </div>
+            <div class="category-edit" data-category="${category}" style="display: none;">
+                <textarea 
+                    class="category-edit-textarea form-control" 
+                    data-category="${category}"
+                    data-entry-id="${entryId || ''}"
+                    rows="4"
+                    style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-family: inherit; font-size: 0.95rem; margin-bottom: 0.5rem;"
+                    placeholder="Enter category content...">${escapeHtml(content)}</textarea>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="btn-save-category btn btn-primary btn-sm" data-category="${category}" style="padding: 0.25rem 0.75rem; font-size: 0.85rem;">
+                        💾 Save
+                    </button>
+                    <button class="btn-cancel-category btn btn-secondary btn-sm" data-category="${category}" style="padding: 0.25rem 0.75rem; font-size: 0.85rem;">
+                        Cancel
+                    </button>
+                    ${hasData ? `<button class="btn-delete-category btn btn-danger btn-sm" data-category="${category}" style="padding: 0.25rem 0.75rem; font-size: 0.85rem; margin-left: auto;">🗑️ Delete</button>` : ''}
                 </div>
-            `).join('') : '<div class="category-empty-message">No entries yet</div>'}
+            </div>
         </div>
     `;
     }).join('');
+    
+    // Add hover effect to show edit button
+    container.querySelectorAll('.category-group').forEach(group => {
+        group.addEventListener('mouseenter', () => {
+            const editBtn = group.querySelector('.btn-edit-category');
+            if (editBtn) editBtn.style.display = 'block';
+        });
+        group.addEventListener('mouseleave', () => {
+            const editBtn = group.querySelector('.btn-edit-category');
+            if (editBtn && !group.querySelector('.category-edit[style*="display: block"]')) {
+                editBtn.style.display = 'none';
+            }
+        });
+    });
+    
+    // Add event listeners for edit buttons
+    container.querySelectorAll('.btn-edit-category').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const category = btn.dataset.category;
+            const group = btn.closest('.category-group');
+            const display = group.querySelector('.category-display');
+            const edit = group.querySelector('.category-edit');
+            
+            if (display && edit) {
+                display.style.display = 'none';
+                edit.style.display = 'block';
+                btn.style.display = 'none';
+                
+                // Focus textarea
+                const textarea = edit.querySelector('.category-edit-textarea');
+                if (textarea) {
+                    textarea.focus();
+                    // Move cursor to end
+                    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+                }
+            }
+        });
+    });
+    
+    // Add event listeners for cancel buttons
+    container.querySelectorAll('.btn-cancel-category').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const category = btn.dataset.category;
+            const group = btn.closest('.category-group');
+            const display = group.querySelector('.category-display');
+            const edit = group.querySelector('.category-edit');
+            const editBtn = group.querySelector('.btn-edit-category');
+            
+            if (display && edit) {
+                // Reset textarea to original content
+                const textarea = edit.querySelector('.category-edit-textarea');
+                const originalContent = currentCategorizedData[category]?.[0]?.content || '';
+                if (textarea) {
+                    textarea.value = originalContent;
+                }
+                
+                display.style.display = 'block';
+                edit.style.display = 'none';
+                if (editBtn) editBtn.style.display = 'none';
+            }
+        });
+    });
+    
+    // Add event listeners for save buttons
+    container.querySelectorAll('.btn-save-category').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const category = btn.dataset.category;
+            const group = btn.closest('.category-group');
+            const textarea = group.querySelector('.category-edit-textarea');
+            const entryId = textarea?.dataset.entryId;
+            const content = textarea?.value.trim() || '';
+            
+            if (!currentContactId) {
+                showNotification('Please select a contact first', 'error');
+                return;
+            }
+            
+            try {
+                showLoading();
+                const { put } = await import('../utils/api.js');
+                const updates = [{
+                    category: category,
+                    content: content,
+                    entry_id: entryId && entryId !== '' ? parseInt(entryId) : null
+                }];
+                
+                const result = await put(`/contacts/${currentContactId}/categories`, { updates });
+                
+                showNotification(result.message || 'Category updated successfully!', 'success');
+                
+                // Reload contact details to refresh display
+                await showContactDetail(currentContactId);
+                
+            } catch (error) {
+                console.error('Error saving category:', error);
+                showNotification(error.message || 'Failed to save category', 'error');
+            } finally {
+                hideLoading();
+            }
+        });
+    });
+    
+    // Add event listeners for delete buttons
+    container.querySelectorAll('.btn-delete-category').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const category = btn.dataset.category;
+            const group = btn.closest('.category-group');
+            const textarea = group.querySelector('.category-edit-textarea');
+            const entryId = textarea?.dataset.entryId;
+            
+            if (!currentContactId) {
+                showNotification('Please select a contact first', 'error');
+                return;
+            }
+            
+            if (!confirm(`Are you sure you want to delete the "${category.replace(/_/g, ' ')}" category?`)) {
+                return;
+            }
+            
+            try {
+                showLoading();
+                const { put } = await import('../utils/api.js');
+                const updates = [{
+                    category: category,
+                    content: '',  // Empty content means delete
+                    entry_id: entryId && entryId !== '' ? parseInt(entryId) : null
+                }];
+                
+                const result = await put(`/contacts/${currentContactId}/categories`, { updates });
+                
+                showNotification(result.message || 'Category deleted successfully!', 'success');
+                
+                // Reload contact details to refresh display
+                await showContactDetail(currentContactId);
+                
+            } catch (error) {
+                console.error('Error deleting category:', error);
+                showNotification(error.message || 'Failed to delete category', 'error');
+            } finally {
+                hideLoading();
+            }
+        });
+    });
 }
 
 export async function openEditCategoriesModal(contactId) {
@@ -296,7 +464,7 @@ export async function saveCategories(contactId) {
                 updates.push({
                     category: category,
                     content: content,
-                    entry_id: entryId || null
+                    entry_id: entryId && entryId !== '' ? parseInt(entryId) : null
                 });
             }
         });

@@ -347,6 +347,12 @@ def update_categories(contact_id):
                 category_name = update.get('category', '').strip()
                 content = update.get('content', '').strip()
                 entry_id = update.get('entry_id')
+                # Convert entry_id to int if it's a string number, or None if empty/None
+                if entry_id is not None:
+                    try:
+                        entry_id = int(entry_id) if entry_id else None
+                    except (ValueError, TypeError):
+                        entry_id = None
                 
                 if not category_name:
                     continue

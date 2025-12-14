@@ -352,14 +352,25 @@ def update_categories(contact_id):
                     continue
                 
                 if not content:
-                    # If content is empty and entry_id exists, delete the entry
+                    # If content is empty, delete all entries for this category
                     if entry_id:
+                        # Delete specific entry
                         entry = session.query(SynthesizedEntry).filter(
                             SynthesizedEntry.id == entry_id,
                             SynthesizedEntry.contact_id == contact_id
                         ).first()
                         if entry:
                             session.delete(entry)
+                            categories_changed.append(f"Deleted {category_name}")
+                    else:
+                        # Delete all entries for this category
+                        entries_to_delete = session.query(SynthesizedEntry).filter(
+                            SynthesizedEntry.contact_id == contact_id,
+                            SynthesizedEntry.category == category_name
+                        ).all()
+                        if entries_to_delete:
+                            for entry in entries_to_delete:
+                                session.delete(entry)
                             categories_changed.append(f"Deleted {category_name}")
                     continue
                 
@@ -371,6 +382,15 @@ def update_categories(contact_id):
                     ).first()
                     
                     if entry:
+                        # Delete other entries for this category (if multiple exist)
+                        other_entries = session.query(SynthesizedEntry).filter(
+                            SynthesizedEntry.contact_id == contact_id,
+                            SynthesizedEntry.category == category_name,
+                            SynthesizedEntry.id != entry_id
+                        ).all()
+                        for other_entry in other_entries:
+                            session.delete(other_entry)
+                        
                         # Check if content actually changed
                         if entry.content != content:
                             entry.content = content
@@ -382,25 +402,51 @@ def update_categories(contact_id):
                                 'content': entry.content,
                                 'confidence': entry.confidence_score
                             })
+                        else:
+                            # Content didn't change, but still return it
+                            updated_categories.append({
+                                'id': entry.id,
+                                'category': entry.category,
+                                'content': entry.content,
+                                'confidence': entry.confidence_score
+                            })
                 else:
-                    # Create new entry
-                    new_entry = SynthesizedEntry(
-                        contact_id=contact_id,
-                        raw_note_id=None,  # Manual edit, no raw note
-                        category=category_name,
-                        content=content,
-                        confidence_score=1.0,  # Manual edits have full confidence
-                        created_at=datetime.utcnow()
-                    )
-                    session.add(new_entry)
-                    session.flush()
-                    categories_changed.append(f"Added {category_name}")
-                    updated_categories.append({
-                        'id': new_entry.id,
-                        'category': new_entry.category,
-                        'content': new_entry.content,
-                        'confidence': new_entry.confidence_score
-                    })
+                    # Check if category already exists (might have been created without entry_id)
+                    existing_entry = session.query(SynthesizedEntry).filter(
+                        SynthesizedEntry.contact_id == contact_id,
+                        SynthesizedEntry.category == category_name
+                    ).first()
+                    
+                    if existing_entry:
+                        # Update existing entry instead of creating new one
+                        existing_entry.content = content
+                        existing_entry.created_at = datetime.utcnow()
+                        categories_changed.append(category_name)
+                        updated_categories.append({
+                            'id': existing_entry.id,
+                            'category': existing_entry.category,
+                            'content': existing_entry.content,
+                            'confidence': existing_entry.confidence_score
+                        })
+                    else:
+                        # Create new entry
+                        new_entry = SynthesizedEntry(
+                            contact_id=contact_id,
+                            raw_note_id=None,  # Manual edit, no raw note
+                            category=category_name,
+                            content=content,
+                            confidence_score=1.0,  # Manual edits have full confidence
+                            created_at=datetime.utcnow()
+                        )
+                        session.add(new_entry)
+                        session.flush()
+                        categories_changed.append(f"Added {category_name}")
+                        updated_categories.append({
+                            'id': new_entry.id,
+                            'category': new_entry.category,
+                            'content': new_entry.content,
+                            'confidence': new_entry.confidence_score
+                        })
             
             # Create audit trail entry (RawNote) for manual edit
             if categories_changed:

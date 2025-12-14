@@ -148,9 +148,15 @@ export async function deleteContact(contactId) {
     }
 }
 
+// Store current categorized data for editing
+let currentCategorizedData = {};
+
 function renderCategories(categorizedData) {
     const container = document.getElementById('categories-list');
     if (!container) return;
+    
+    // Store for editing
+    currentCategorizedData = categorizedData;
     
     // Define all categories in order
     const allCategories = [
@@ -189,6 +195,163 @@ function renderCategories(categorizedData) {
     }).join('');
 }
 
+export async function openEditCategoriesModal(contactId) {
+    try {
+        showLoading();
+        // Get current contact data
+        const contact = await get(`/contacts/${contactId}`);
+        const categorizedData = contact.categorized_data || {};
+        
+        // Populate edit form
+        const editList = document.getElementById('categories-edit-list');
+        if (!editList) {
+            hideLoading();
+            return;
+        }
+        
+        // Define all categories
+        const allCategories = [
+            'Actionable',
+            'Goals',
+            'Relationship_Strategy',
+            'Social',
+            'Professional_Background',
+            'Financial_Situation',
+            'Wellbeing',
+            'Avocation',
+            'Environment_And_Lifestyle',
+            'Psychology_And_Values',
+            'Communication_Style',
+            'Challenges_And_Development',
+            'Deeper_Insights',
+            'Admin_matters',
+            'Others'
+        ];
+        
+        editList.innerHTML = allCategories.map(category => {
+            const items = categorizedData[category] || [];
+            // Combine all entries for this category (in case there are multiple)
+            const content = items.length > 0 ? items.map(item => item.content).join('\n\n') : '';
+            // Use the first entry ID if exists (for updates), or all IDs if multiple
+            const entryId = items.length > 0 ? items[0].id : null;
+            
+            return `
+                <div class="category-edit-item" style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid #eee;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #333;">
+                        ${escapeHtml(category.replace(/_/g, ' '))}
+                    </label>
+                    <textarea 
+                        class="form-control category-edit-textarea" 
+                        data-category="${category}"
+                        data-entry-id="${entryId || ''}"
+                        rows="4"
+                        style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-family: inherit; font-size: 0.95rem;"
+                        placeholder="No content yet...">${escapeHtml(content)}</textarea>
+                    ${content ? `<button class="btn btn-danger btn-sm clear-category-btn" data-category="${category}" style="margin-top: 0.5rem; padding: 0.25rem 0.75rem; font-size: 0.85rem;">Clear</button>` : ''}
+                </div>
+            `;
+        }).join('');
+        
+        // Add event listeners for clear buttons
+        editList.querySelectorAll('.clear-category-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const category = btn.dataset.category;
+                const textarea = editList.querySelector(`textarea[data-category="${category}"]`);
+                if (textarea) {
+                    textarea.value = '';
+                }
+            });
+        });
+        
+        // Show modal
+        const modal = document.getElementById('edit-categories-modal');
+        if (modal) {
+            modal.style.display = 'block';
+            modal.classList.add('active');
+        }
+        
+        hideLoading();
+    } catch (error) {
+        console.error('Error opening edit categories modal:', error);
+        showNotification('Failed to load categories for editing', 'error');
+        hideLoading();
+    }
+}
+
+export async function saveCategories(contactId) {
+    try {
+        const editList = document.getElementById('categories-edit-list');
+        if (!editList) return;
+        
+        const updates = [];
+        const textareas = editList.querySelectorAll('.category-edit-textarea');
+        
+        textareas.forEach(textarea => {
+            const category = textarea.dataset.category;
+            const entryId = textarea.dataset.entryId;
+            const content = textarea.value.trim();
+            
+            // Only include if there's content or if it's an existing entry (to allow deletion)
+            if (content || entryId) {
+                updates.push({
+                    category: category,
+                    content: content,
+                    entry_id: entryId || null
+                });
+            }
+        });
+        
+        // Check for new category
+        const newCategorySelect = document.getElementById('new-category-select');
+        const newCategoryContent = document.getElementById('new-category-content');
+        
+        if (newCategorySelect && newCategorySelect.value && newCategoryContent && newCategoryContent.value.trim()) {
+            // Check if category already exists in updates
+            const categoryExists = updates.some(u => u.category === newCategorySelect.value);
+            if (!categoryExists) {
+                updates.push({
+                    category: newCategorySelect.value,
+                    content: newCategoryContent.value.trim(),
+                    entry_id: null
+                });
+            }
+        }
+        
+        if (updates.length === 0) {
+            showNotification('No changes to save', 'info');
+            return;
+        }
+        
+        showLoading();
+        
+        // Call API
+        const { put } = await import('../utils/api.js');
+        const result = await put(`/contacts/${contactId}/categories`, { updates });
+        
+        showNotification(result.message || 'Categories updated successfully!', 'success');
+        
+        // Close modal
+        const modal = document.getElementById('edit-categories-modal');
+        if (modal) {
+            modal.style.display = 'none';
+            modal.classList.remove('active');
+        }
+        
+        // Clear new category fields
+        if (newCategorySelect) newCategorySelect.value = '';
+        if (newCategoryContent) newCategoryContent.value = '';
+        
+        // Reload contact details
+        await showContactDetail(contactId);
+        
+    } catch (error) {
+        console.error('Error saving categories:', error);
+        showNotification(error.message || 'Failed to save categories', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
 async function loadAuditTrail(contactId) {
     try {
         const logs = await get(`/contacts/${contactId}/logs`);
@@ -207,9 +370,16 @@ function renderAuditTrail(notes) {
         return;
     }
     
-    container.innerHTML = notes.map(note => `
-        <div class="log-entry">
-            <div class="log-date">${formatDate(note.created_at)}</div>
+    container.innerHTML = notes.map(note => {
+        const isManualEdit = note.source === 'manual_edit';
+        const sourceBadge = isManualEdit ? '<span class="source-badge" style="background: #28a745; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.85rem; margin-left: 0.5rem;">✏️ Manual Edit</span>' : '';
+        
+        return `
+        <div class="log-entry ${isManualEdit ? 'manual-edit-entry' : ''}" style="${isManualEdit ? 'border-left: 3px solid #28a745; padding-left: 1rem;' : ''}">
+            <div class="log-date" style="display: flex; align-items: center; gap: 0.5rem;">
+                ${formatDate(note.created_at)}
+                ${sourceBadge}
+            </div>
             <div class="log-content">${escapeHtml(note.content)}</div>
             ${note.synthesized_entries && note.synthesized_entries.length > 0 ? `
                 <div class="synthesized-entries">
@@ -223,7 +393,8 @@ function renderAuditTrail(notes) {
                 </div>
             ` : ''}
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 function escapeHtml(text) {

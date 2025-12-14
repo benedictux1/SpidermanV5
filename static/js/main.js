@@ -5,7 +5,7 @@
 
 import { get, post } from './utils/api.js';
 import { showNotification, showLoading, hideLoading } from './utils/ui.js';
-import { loadContacts, createContact, showContactDetail, showContactsList, deleteContact, currentContactId } from './modules/contacts.js';
+import { loadContacts, createContact, showContactDetail, showContactsList, deleteContact, currentContactId, openEditCategoriesModal, saveCategories } from './modules/contacts.js';
 import { processNote, clearAnalysisResults } from './modules/notes.js';
 
 // Check authentication on load (optional - login disabled)
@@ -209,5 +209,85 @@ function setupEventHandlers() {
             await showContactDetail(currentContactId);
         }
     };
+    
+    // Edit Categories button
+    const editCategoriesBtn = document.getElementById('edit-categories-btn');
+    if (editCategoriesBtn) {
+        editCategoriesBtn.addEventListener('click', () => {
+            if (currentContactId) {
+                openEditCategoriesModal(currentContactId);
+            } else {
+                showNotification('Please select a contact first', 'error');
+            }
+        });
+    }
+    
+    // Save Categories button
+    const saveCategoriesBtn = document.getElementById('save-categories-btn');
+    if (saveCategoriesBtn) {
+        saveCategoriesBtn.addEventListener('click', () => {
+            if (currentContactId) {
+                saveCategories(currentContactId);
+            }
+        });
+    }
+    
+    // Cancel Edit Categories
+    const cancelEditCategories = document.getElementById('cancel-edit-categories');
+    const closeEditCategories = document.querySelector('.close-edit-categories');
+    const closeEditCategoriesHandler = () => {
+        const modal = document.getElementById('edit-categories-modal');
+        if (modal) {
+            modal.style.display = 'none';
+            modal.classList.remove('active');
+        }
+    };
+    
+    if (cancelEditCategories) {
+        cancelEditCategories.addEventListener('click', closeEditCategoriesHandler);
+    }
+    if (closeEditCategories) {
+        closeEditCategories.addEventListener('click', closeEditCategoriesHandler);
+    }
+    
+    // Add Category button
+    const addCategoryBtn = document.getElementById('add-category-btn');
+    if (addCategoryBtn) {
+        addCategoryBtn.addEventListener('click', () => {
+            const newCategorySelect = document.getElementById('new-category-select');
+            const newCategoryContent = document.getElementById('new-category-content');
+            
+            if (!newCategorySelect || !newCategoryContent) return;
+            
+            const category = newCategorySelect.value;
+            const content = newCategoryContent.value.trim();
+            
+            if (!category) {
+                showNotification('Please select a category', 'error');
+                return;
+            }
+            
+            if (!content) {
+                showNotification('Please enter content for the category', 'error');
+                return;
+            }
+            
+            // Check if category already exists in the form
+            const editList = document.getElementById('categories-edit-list');
+            const existingTextarea = editList?.querySelector(`textarea[data-category="${category}"]`);
+            
+            if (existingTextarea) {
+                // Update existing textarea
+                existingTextarea.value = content;
+                showNotification(`Updated ${category} category`, 'success');
+            } else {
+                showNotification('Category not found in form', 'error');
+            }
+            
+            // Clear fields
+            newCategorySelect.value = '';
+            newCategoryContent.value = '';
+        });
+    }
 }
 

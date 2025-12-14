@@ -87,6 +87,7 @@ class ContactService:
                 if entry.category not in categorized_data:
                     categorized_data[entry.category] = []
                 categorized_data[entry.category].append({
+                    'id': entry.id,  # Include entry ID for editing
                     'content': entry.content,
                     'confidence': entry.confidence_score,
                     'created_at': entry.created_at.isoformat() if entry.created_at else None

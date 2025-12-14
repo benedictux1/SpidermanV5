@@ -312,6 +312,128 @@ def delete_contact(contact_id):
         return jsonify({'error': 'Failed to delete contact', 'details': str(e)}), 500
 
 
+@contacts_bp.route('/<int:contact_id>/categories', methods=['PUT'])
+def update_categories(contact_id):
+    """Update categories for a contact (bulk edit)"""
+    try:
+        from datetime import datetime
+        
+        user_id = get_user_id()
+        data = request.get_json()
+        
+        if not data or 'updates' not in data:
+            return jsonify({'error': 'Updates array is required'}), 400
+        
+        updates = data.get('updates', [])
+        if not isinstance(updates, list):
+            return jsonify({'error': 'Updates must be an array'}), 400
+        
+        db_manager = DatabaseManager()
+        with db_manager.get_session() as session:
+            # Verify contact ownership
+            contact = session.query(Contact).filter(
+                Contact.id == contact_id,
+                Contact.user_id == user_id
+            ).first()
+            
+            if not contact:
+                return jsonify({'error': 'Contact not found'}), 404
+            
+            updated_categories = []
+            categories_changed = []
+            
+            # Process each update
+            for update in updates:
+                category_name = update.get('category', '').strip()
+                content = update.get('content', '').strip()
+                entry_id = update.get('entry_id')
+                
+                if not category_name:
+                    continue
+                
+                if not content:
+                    # If content is empty and entry_id exists, delete the entry
+                    if entry_id:
+                        entry = session.query(SynthesizedEntry).filter(
+                            SynthesizedEntry.id == entry_id,
+                            SynthesizedEntry.contact_id == contact_id
+                        ).first()
+                        if entry:
+                            session.delete(entry)
+                            categories_changed.append(f"Deleted {category_name}")
+                    continue
+                
+                if entry_id:
+                    # Update existing entry
+                    entry = session.query(SynthesizedEntry).filter(
+                        SynthesizedEntry.id == entry_id,
+                        SynthesizedEntry.contact_id == contact_id
+                    ).first()
+                    
+                    if entry:
+                        # Check if content actually changed
+                        if entry.content != content:
+                            entry.content = content
+                            entry.created_at = datetime.utcnow()  # Update timestamp
+                            categories_changed.append(category_name)
+                            updated_categories.append({
+                                'id': entry.id,
+                                'category': entry.category,
+                                'content': entry.content,
+                                'confidence': entry.confidence_score
+                            })
+                else:
+                    # Create new entry
+                    new_entry = SynthesizedEntry(
+                        contact_id=contact_id,
+                        raw_note_id=None,  # Manual edit, no raw note
+                        category=category_name,
+                        content=content,
+                        confidence_score=1.0,  # Manual edits have full confidence
+                        created_at=datetime.utcnow()
+                    )
+                    session.add(new_entry)
+                    session.flush()
+                    categories_changed.append(f"Added {category_name}")
+                    updated_categories.append({
+                        'id': new_entry.id,
+                        'category': new_entry.category,
+                        'content': new_entry.content,
+                        'confidence': new_entry.confidence_score
+                    })
+            
+            # Create audit trail entry (RawNote) for manual edit
+            if categories_changed:
+                edit_summary = f"Manual edit: {', '.join(categories_changed)}"
+                raw_note = RawNote(
+                    contact_id=contact_id,
+                    content=edit_summary,
+                    source='manual_edit',
+                    created_at=datetime.utcnow()
+                )
+                session.add(raw_note)
+                session.commit()
+                
+                logger.info(f"Updated {len(categories_changed)} categories for contact {contact_id}")
+                
+                return jsonify({
+                    'success': True,
+                    'message': f'Updated {len(categories_changed)} categories',
+                    'updated_categories': updated_categories,
+                    'changes': categories_changed
+                }), 200
+            else:
+                return jsonify({
+                    'success': True,
+                    'message': 'No changes made',
+                    'updated_categories': []
+                }), 200
+            
+    except Exception as e:
+        current_app.logger.error(f"Error updating categories for contact {contact_id}: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to update categories', 'details': str(e)}), 500
+
+
 @contacts_bp.route('/export/csv', methods=['GET'])
 def export_contacts_csv():
     """Export all contacts, categories, and audit trail to CSV"""

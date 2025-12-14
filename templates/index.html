@@ -83,8 +83,55 @@
                 
                 <!-- Categories Display -->
                 <div id="contact-categories" class="categories-section">
-                    <h3>Categories</h3>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h3>Categories</h3>
+                        <button id="edit-categories-btn" class="btn btn-secondary">✏️ Edit Categories</button>
+                    </div>
                     <div id="categories-list"></div>
+                </div>
+                
+                <!-- Edit Categories Modal -->
+                <div id="edit-categories-modal" class="modal" style="display: none;">
+                    <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+                        <span class="close-edit-categories">&times;</span>
+                        <h2>Edit Categories</h2>
+                        <div id="categories-edit-form">
+                            <div id="categories-edit-list"></div>
+                            <div class="add-category-section" style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd;">
+                                <h4>Add New Category</h4>
+                                <div class="form-group">
+                                    <label for="new-category-select">Category</label>
+                                    <select id="new-category-select" class="form-control">
+                                        <option value="">Select a category...</option>
+                                        <option value="Actionable">Actionable</option>
+                                        <option value="Goals">Goals</option>
+                                        <option value="Relationship_Strategy">Relationship_Strategy</option>
+                                        <option value="Social">Social</option>
+                                        <option value="Professional_Background">Professional_Background</option>
+                                        <option value="Financial_Situation">Financial_Situation</option>
+                                        <option value="Wellbeing">Wellbeing</option>
+                                        <option value="Avocation">Avocation</option>
+                                        <option value="Environment_And_Lifestyle">Environment_And_Lifestyle</option>
+                                        <option value="Psychology_And_Values">Psychology_And_Values</option>
+                                        <option value="Communication_Style">Communication_Style</option>
+                                        <option value="Challenges_And_Development">Challenges_And_Development</option>
+                                        <option value="Deeper_Insights">Deeper_Insights</option>
+                                        <option value="Admin_matters">Admin_matters</option>
+                                        <option value="Others">Others</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="new-category-content">Content</label>
+                                    <textarea id="new-category-content" class="form-control" rows="3" placeholder="Enter category content..."></textarea>
+                                </div>
+                                <button id="add-category-btn" class="btn btn-secondary">Add Category</button>
+                            </div>
+                        </div>
+                        <div class="modal-actions" style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 1rem;">
+                            <button id="cancel-edit-categories" class="btn btn-secondary">Cancel</button>
+                            <button id="save-categories-btn" class="btn btn-primary">Save Changes</button>
+                        </div>
+                    </div>
                 </div>
                 
                 <!-- Audit Trail -->

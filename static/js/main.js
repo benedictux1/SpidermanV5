@@ -44,6 +44,60 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function setupEventHandlers() {
+    // Export CSV button
+    const exportCsvBtn = document.getElementById('export-csv-btn');
+    if (exportCsvBtn) {
+        exportCsvBtn.addEventListener('click', async () => {
+            try {
+                showLoading();
+                showNotification('Preparing CSV export...', 'info');
+                
+                // Fetch CSV from API
+                const response = await fetch('/api/contacts/export/csv', {
+                    method: 'GET',
+                    credentials: 'same-origin'
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to export CSV');
+                }
+                
+                // Get CSV content
+                const csvContent = await response.text();
+                
+                // Create download link
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                
+                // Get filename from Content-Disposition header or use default
+                const contentDisposition = response.headers.get('Content-Disposition');
+                let filename = 'kith_platform_export.csv';
+                if (contentDisposition) {
+                    const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+                    if (filenameMatch) {
+                        filename = filenameMatch[1];
+                    }
+                }
+                
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+                showNotification('CSV export downloaded successfully!', 'success');
+            } catch (error) {
+                console.error('Export CSV error:', error);
+                showNotification(error.message || 'Failed to export CSV', 'error');
+            } finally {
+                hideLoading();
+            }
+        });
+    }
+    
     // Logout button (disabled - login disabled)
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) {

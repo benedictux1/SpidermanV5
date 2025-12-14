@@ -310,3 +310,132 @@ def delete_contact(contact_id):
     except Exception as e:
         current_app.logger.error(f"Error deleting contact {contact_id}: {e}", exc_info=True)
         return jsonify({'error': 'Failed to delete contact', 'details': str(e)}), 500
+
+
+@contacts_bp.route('/export/csv', methods=['GET'])
+def export_contacts_csv():
+    """Export all contacts, categories, and audit trail to CSV"""
+    try:
+        import csv
+        import io
+        from datetime import datetime
+        from flask import Response
+        
+        user_id = get_user_id()
+        db_manager = DatabaseManager()
+        
+        with db_manager.get_session() as session:
+            # Get all contacts for the user
+            contacts = session.query(Contact).filter(
+                Contact.user_id == user_id
+            ).order_by(Contact.full_name.asc()).all()
+            
+            # Create CSV in memory
+            output = io.StringIO()
+            writer = csv.writer(output)
+            
+            # Write header row
+            writer.writerow([
+                'Contact ID',
+                'Contact Name',
+                'Tier',
+                'Created At',
+                'Category',
+                'Category Content',
+                'Confidence',
+                'Raw Note ID',
+                'Raw Note Content',
+                'Raw Note Source',
+                'Raw Note Created At'
+            ])
+            
+            # Write data rows
+            for contact in contacts:
+                # Get all synthesized entries (categories) for this contact
+                entries = session.query(SynthesizedEntry).filter(
+                    SynthesizedEntry.contact_id == contact.id
+                ).order_by(SynthesizedEntry.category.asc(), SynthesizedEntry.created_at.desc()).all()
+                
+                # Get all raw notes (audit trail) for this contact
+                raw_notes = session.query(RawNote).filter(
+                    RawNote.contact_id == contact.id
+                ).order_by(RawNote.created_at.desc()).all()
+                
+                # Create a mapping of raw_note_id to note content for reference
+                note_map = {note.id: note for note in raw_notes}
+                
+                # If contact has categories, write one row per category
+                if entries:
+                    for entry in entries:
+                        raw_note = note_map.get(entry.raw_note_id)
+                        writer.writerow([
+                            contact.id,
+                            contact.full_name,
+                            contact.tier,
+                            contact.created_at.isoformat() if contact.created_at else '',
+                            entry.category,
+                            entry.content,
+                            entry.confidence_score,
+                            entry.raw_note_id if entry.raw_note_id else '',
+                            raw_note.content if raw_note else '',
+                            raw_note.source if raw_note else '',
+                            raw_note.created_at.isoformat() if raw_note and raw_note.created_at else ''
+                        ])
+                else:
+                    # If no categories, still write contact info with empty category fields
+                    writer.writerow([
+                        contact.id,
+                        contact.full_name,
+                        contact.tier,
+                        contact.created_at.isoformat() if contact.created_at else '',
+                        '',  # No category
+                        '',  # No category content
+                        '',  # No confidence
+                        '',  # No raw note ID
+                        '',  # No raw note content
+                        '',  # No raw note source
+                        ''   # No raw note created at
+                    ])
+                
+                # Write raw notes that don't have synthesized entries (if any)
+                entries_note_ids = {entry.raw_note_id for entry in entries if entry.raw_note_id}
+                for note in raw_notes:
+                    if note.id not in entries_note_ids:
+                        # This note doesn't have categories yet
+                        writer.writerow([
+                            contact.id,
+                            contact.full_name,
+                            contact.tier,
+                            contact.created_at.isoformat() if contact.created_at else '',
+                            '',  # No category
+                            '',  # No category content
+                            '',  # No confidence
+                            note.id,
+                            note.content,
+                            note.source,
+                            note.created_at.isoformat() if note.created_at else ''
+                        ])
+            
+            # Get CSV content
+            csv_content = output.getvalue()
+            output.close()
+            
+            # Create response with CSV
+            timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+            filename = f'kith_platform_export_{timestamp}.csv'
+            
+            response = Response(
+                csv_content,
+                mimetype='text/csv',
+                headers={
+                    'Content-Disposition': f'attachment; filename={filename}',
+                    'Content-Type': 'text/csv; charset=utf-8'
+                }
+            )
+            
+            logger.info(f"CSV export completed: {len(contacts)} contacts exported")
+            return response
+            
+    except Exception as e:
+        current_app.logger.error(f"Error exporting CSV: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to export CSV', 'details': str(e)}), 500

@@ -542,13 +542,16 @@ function renderAuditTrail(notes) {
         const isManualEdit = note.source === 'manual_edit';
         const sourceBadge = isManualEdit ? '<span class="source-badge" style="background: #28a745; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.85rem; margin-left: 0.5rem;">✏️ Manual Edit</span>' : '';
         
+        // For manual edits, render the content with markdown to show formatted changes
+        const contentDisplay = isManualEdit ? renderMarkdown(note.content) : escapeHtml(note.content);
+        
         return `
         <div class="log-entry ${isManualEdit ? 'manual-edit-entry' : ''}" style="${isManualEdit ? 'border-left: 3px solid #28a745; padding-left: 1rem;' : ''}">
             <div class="log-date" style="display: flex; align-items: center; gap: 0.5rem;">
                 ${formatDate(note.created_at)}
                 ${sourceBadge}
             </div>
-            <div class="log-content">${escapeHtml(note.content)}</div>
+            <div class="log-content" style="${isManualEdit ? 'white-space: pre-wrap; line-height: 1.6;' : ''}">${contentDisplay}</div>
             ${note.synthesized_entries && note.synthesized_entries.length > 0 ? `
                 <div class="synthesized-entries">
                     ${note.synthesized_entries.map(entry => `

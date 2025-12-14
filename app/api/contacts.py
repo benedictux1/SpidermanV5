@@ -341,6 +341,46 @@ def update_categories(contact_id):
             
             updated_categories = []
             categories_changed = []
+            detailed_changes = []  # Store detailed change information
+            
+            # Helper function to generate diff-like change description
+            def generate_change_description(category_name, old_content, new_content, action):
+                """Generate a detailed description of what changed"""
+                old_content = (old_content or '').strip()
+                new_content = (new_content or '').strip()
+                
+                if action == 'deleted':
+                    return f"**{category_name}** - Deleted: {old_content[:100]}{'...' if len(old_content) > 100 else ''}"
+                elif action == 'added':
+                    return f"**{category_name}** - Added: {new_content[:100]}{'...' if len(new_content) > 100 else ''}"
+                elif action == 'updated':
+                    # Show what was removed and what was added
+                    old_lines = set(old_content.split('\n')) if old_content else set()
+                    new_lines = set(new_content.split('\n')) if new_content else set()
+                    
+                    removed = old_lines - new_lines
+                    added = new_lines - old_lines
+                    
+                    parts = []
+                    if removed:
+                        removed_text = ' | '.join(list(removed)[:3])  # Show first 3 removed items
+                        if len(removed) > 3:
+                            removed_text += f" (+{len(removed) - 3} more)"
+                        parts.append(f"Removed: {removed_text}")
+                    
+                    if added:
+                        added_text = ' | '.join(list(added)[:3])  # Show first 3 added items
+                        if len(added) > 3:
+                            added_text += f" (+{len(added) - 3} more)"
+                        parts.append(f"Added: {added_text}")
+                    
+                    if not parts:
+                        # Content changed but hard to diff (maybe reordered or reformatted)
+                        return f"**{category_name}** - Updated (content changed)"
+                    
+                    return f"**{category_name}** - {', '.join(parts)}"
+                else:
+                    return f"**{category_name}** - {action}"
             
             # Process each update
             for update in updates:
@@ -359,6 +399,7 @@ def update_categories(contact_id):
                 
                 if not content:
                     # If content is empty, delete all entries for this category
+                    old_content = None
                     if entry_id:
                         # Delete specific entry
                         entry = session.query(SynthesizedEntry).filter(
@@ -366,8 +407,11 @@ def update_categories(contact_id):
                             SynthesizedEntry.contact_id == contact_id
                         ).first()
                         if entry:
+                            old_content = entry.content
                             session.delete(entry)
-                            categories_changed.append(f"Deleted {category_name}")
+                            change_desc = generate_change_description(category_name, old_content, '', 'deleted')
+                            categories_changed.append(category_name)
+                            detailed_changes.append(change_desc)
                     else:
                         # Delete all entries for this category
                         entries_to_delete = session.query(SynthesizedEntry).filter(
@@ -375,9 +419,13 @@ def update_categories(contact_id):
                             SynthesizedEntry.category == category_name
                         ).all()
                         if entries_to_delete:
+                            # Get content from first entry for audit trail
+                            old_content = entries_to_delete[0].content if entries_to_delete else None
                             for entry in entries_to_delete:
                                 session.delete(entry)
-                            categories_changed.append(f"Deleted {category_name}")
+                            change_desc = generate_change_description(category_name, old_content, '', 'deleted')
+                            categories_changed.append(category_name)
+                            detailed_changes.append(change_desc)
                     continue
                 
                 if entry_id:
@@ -388,6 +436,8 @@ def update_categories(contact_id):
                     ).first()
                     
                     if entry:
+                        old_content = entry.content
+                        
                         # Delete other entries for this category (if multiple exist)
                         other_entries = session.query(SynthesizedEntry).filter(
                             SynthesizedEntry.contact_id == contact_id,
@@ -401,7 +451,9 @@ def update_categories(contact_id):
                         if entry.content != content:
                             entry.content = content
                             entry.created_at = datetime.utcnow()  # Update timestamp
+                            change_desc = generate_change_description(category_name, old_content, content, 'updated')
                             categories_changed.append(category_name)
+                            detailed_changes.append(change_desc)
                             updated_categories.append({
                                 'id': entry.id,
                                 'category': entry.category,
@@ -424,10 +476,13 @@ def update_categories(contact_id):
                     ).first()
                     
                     if existing_entry:
+                        old_content = existing_entry.content
                         # Update existing entry instead of creating new one
                         existing_entry.content = content
                         existing_entry.created_at = datetime.utcnow()
+                        change_desc = generate_change_description(category_name, old_content, content, 'updated')
                         categories_changed.append(category_name)
+                        detailed_changes.append(change_desc)
                         updated_categories.append({
                             'id': existing_entry.id,
                             'category': existing_entry.category,
@@ -446,7 +501,9 @@ def update_categories(contact_id):
                         )
                         session.add(new_entry)
                         session.flush()
-                        categories_changed.append(f"Added {category_name}")
+                        change_desc = generate_change_description(category_name, '', content, 'added')
+                        categories_changed.append(category_name)
+                        detailed_changes.append(change_desc)
                         updated_categories.append({
                             'id': new_entry.id,
                             'category': new_entry.category,
@@ -454,9 +511,13 @@ def update_categories(contact_id):
                             'confidence': new_entry.confidence_score
                         })
             
-            # Create audit trail entry (RawNote) for manual edit
+            # Create audit trail entry (RawNote) for manual edit with detailed changes
             if categories_changed:
-                edit_summary = f"Manual edit: {', '.join(categories_changed)}"
+                # Create detailed summary
+                summary_parts = [f"Manual edit: {len(categories_changed)} categor{'y' if len(categories_changed) == 1 else 'ies'} changed"]
+                summary_parts.extend(detailed_changes)
+                edit_summary = '\n\n'.join(summary_parts)
+                
                 raw_note = RawNote(
                     contact_id=contact_id,
                     content=edit_summary,

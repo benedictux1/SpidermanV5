@@ -178,27 +178,83 @@ Return ONLY the JSON response."""
             if response_text.endswith('```'):
                 response_text = response_text[:-3]
             
-            # Clean control characters that can break JSON parsing
+            # Clean and fix JSON - handle newlines in string values
             import re
-            # Remove control characters except newlines, tabs, and carriage returns
-            response_text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', response_text.strip())
+            response_text = response_text.strip()
+            
+            # Fix unescaped newlines in JSON string values
+            # This regex finds string values and replaces literal newlines with \n
+            def fix_json_newlines(text):
+                """Fix unescaped newlines in JSON string values"""
+                # Pattern to match string values in JSON (between quotes)
+                # This is a simplified approach - find content between quotes and fix newlines
+                result = []
+                in_string = False
+                escape_next = False
+                i = 0
+                
+                while i < len(text):
+                    char = text[i]
+                    
+                    if escape_next:
+                        result.append(char)
+                        escape_next = False
+                    elif char == '\\':
+                        result.append(char)
+                        escape_next = True
+                    elif char == '"' and not escape_next:
+                        result.append(char)
+                        in_string = not in_string
+                    elif in_string and char == '\n':
+                        # Replace literal newline with escaped newline
+                        result.append('\\n')
+                    elif in_string and char == '\r':
+                        # Replace carriage return
+                        result.append('\\r')
+                    elif in_string and char == '\t':
+                        # Replace tab with escaped tab
+                        result.append('\\t')
+                    else:
+                        result.append(char)
+                    i += 1
+                
+                return ''.join(result)
             
             try:
-                result = json.loads(response_text)
+                # IMPORTANT: Fix newlines BEFORE removing control characters
+                # This ensures we escape newlines in string values first
+                cleaned = fix_json_newlines(response_text)
+                # Then remove other control characters (but keep already-escaped \n, \r, \t)
+                cleaned = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', cleaned)
+                result = json.loads(cleaned)
             except json.JSONDecodeError as json_error:
                 logger.error(f"JSON decode error: {json_error}")
-                logger.error(f"Response text (first 500 chars): {response_text[:500]}")
-                # Try to extract JSON from the response if it's embedded in text
-                import re as regex_module
-                json_match = regex_module.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response_text, regex_module.DOTALL)
-                if json_match:
-                    try:
-                        result = json.loads(json_match.group(0))
-                        logger.info("Successfully extracted JSON from response")
-                    except:
+                logger.error(f"Response text (first 1000 chars): {response_text[:1000]}")
+                
+                # Try alternative: use json5 or manual parsing
+                try:
+                    # Try to fix common JSON issues
+                    # Replace literal newlines in string values with \n
+                    fixed_text = response_text
+                    # Find all string values and escape newlines
+                    fixed_text = re.sub(r'(?<!\\)"(?:[^"\\]|\\.)*"', lambda m: m.group(0).replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t'), fixed_text, flags=re.DOTALL)
+                    result = json.loads(fixed_text)
+                    logger.info("Successfully fixed JSON by escaping newlines")
+                except:
+                    # Last resort: try to extract JSON from the response if it's embedded in text
+                    json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response_text, re.DOTALL)
+                    if json_match:
+                        try:
+                            extracted = json_match.group(0)
+                            # Fix newlines in extracted JSON
+                            extracted = fix_json_newlines(extracted)
+                            result = json.loads(extracted)
+                            logger.info("Successfully extracted and fixed JSON from response")
+                        except Exception as extract_error:
+                            logger.error(f"Failed to extract JSON: {extract_error}")
+                            raise json_error
+                    else:
                         raise json_error
-                else:
-                    raise json_error
             if 'categories' not in result:
                 result = {'categories': result}
             
@@ -289,27 +345,65 @@ Return ONLY the JSON response."""
             if result_text.endswith('```'):
                 result_text = result_text[:-3]
             
-            # Clean control characters that can break JSON parsing
-            import re
-            # Remove control characters except newlines, tabs, and carriage returns
-            result_text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', result_text.strip())
+            # Use the same JSON fixing function as Gemini
+            def fix_json_newlines(text):
+                """Fix unescaped newlines in JSON string values"""
+                result = []
+                in_string = False
+                escape_next = False
+                i = 0
+                
+                while i < len(text):
+                    char = text[i]
+                    
+                    if escape_next:
+                        result.append(char)
+                        escape_next = False
+                    elif char == '\\':
+                        result.append(char)
+                        escape_next = True
+                    elif char == '"' and not escape_next:
+                        result.append(char)
+                        in_string = not in_string
+                    elif in_string and char == '\n':
+                        result.append('\\n')
+                    elif in_string and char == '\r':
+                        result.append('\\r')
+                    elif in_string and char == '\t':
+                        result.append('\\t')
+                    else:
+                        result.append(char)
+                    i += 1
+                
+                return ''.join(result)
             
+            # Clean and fix JSON
+            import re
             try:
-                result = json.loads(result_text)
+                # Fix newlines BEFORE removing control characters
+                cleaned = fix_json_newlines(result_text)
+                # Then remove other control characters
+                cleaned = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', cleaned)
+                result = json.loads(cleaned)
             except json.JSONDecodeError as json_error:
                 logger.error(f"JSON decode error: {json_error}")
-                logger.error(f"Response text (first 500 chars): {result_text[:500]}")
-                # Try to extract JSON from the response if it's embedded in text
-                import re as regex_module
-                json_match = regex_module.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', result_text, regex_module.DOTALL)
-                if json_match:
-                    try:
-                        result = json.loads(json_match.group(0))
-                        logger.info("Successfully extracted JSON from response")
-                    except:
+                logger.error(f"Response text (first 1000 chars): {result_text[:1000]}")
+                # Try alternative fix
+                try:
+                    fixed_text = re.sub(r'(?<!\\)"(?:[^"\\]|\\.)*"', lambda m: m.group(0).replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t'), result_text, flags=re.DOTALL)
+                    result = json.loads(fixed_text)
+                    logger.info("Successfully fixed JSON by escaping newlines (regex method)")
+                except:
+                    json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', result_text, re.DOTALL)
+                    if json_match:
+                        try:
+                            extracted = fix_json_newlines(json_match.group(0))
+                            result = json.loads(extracted)
+                            logger.info("Successfully extracted and fixed JSON from response")
+                        except:
+                            raise json_error
+                    else:
                         raise json_error
-                else:
-                    raise json_error
             if 'categories' not in result:
                 result = {'categories': result}
             

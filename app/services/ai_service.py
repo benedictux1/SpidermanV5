@@ -63,8 +63,13 @@ class AIService:
                 return result
             except Exception as e:
                 logger.warning(f"OpenAI analysis failed: {e}, using local fallback")
+                # Don't return yet - try fallback below
         
-        logger.warning("⚠️ Using fallback keyword matching (AI services unavailable)")
+        # Only use fallback if both AI services failed or are unavailable
+        if not self.gemini_api_key and not self.openai_api_key:
+            logger.warning("⚠️ No AI API keys configured - using fallback keyword matching")
+        else:
+            logger.warning("⚠️ All AI services failed - using fallback keyword matching")
         return self._fallback_analysis(content, contact_name)
     
     def _analyze_with_gemini(self, content: str, contact_name: str, context: Optional[str] = None) -> Dict[str, Any]:
@@ -141,7 +146,17 @@ Return ONLY the JSON response."""
             retry_delay = 2
             for attempt in range(max_retries):
                 try:
-                    response = model.generate_content(prompt)
+                    # Use generation config to get cleaner JSON responses
+                    generation_config = {
+                        "temperature": 0.3,
+                        "top_p": 0.95,
+                        "top_k": 40,
+                        "max_output_tokens": 8192,
+                    }
+                    response = model.generate_content(
+                        prompt,
+                        generation_config=generation_config
+                    )
                     break
                 except Exception as e:
                     if "quota" in str(e).lower() or "429" in str(e) or "ResourceExhausted" in str(type(e).__name__):
@@ -163,7 +178,27 @@ Return ONLY the JSON response."""
             if response_text.endswith('```'):
                 response_text = response_text[:-3]
             
-            result = json.loads(response_text.strip())
+            # Clean control characters that can break JSON parsing
+            import re
+            # Remove control characters except newlines, tabs, and carriage returns
+            response_text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', response_text.strip())
+            
+            try:
+                result = json.loads(response_text)
+            except json.JSONDecodeError as json_error:
+                logger.error(f"JSON decode error: {json_error}")
+                logger.error(f"Response text (first 500 chars): {response_text[:500]}")
+                # Try to extract JSON from the response if it's embedded in text
+                import re as regex_module
+                json_match = regex_module.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response_text, regex_module.DOTALL)
+                if json_match:
+                    try:
+                        result = json.loads(json_match.group(0))
+                        logger.info("Successfully extracted JSON from response")
+                    except:
+                        raise json_error
+                else:
+                    raise json_error
             if 'categories' not in result:
                 result = {'categories': result}
             
@@ -254,7 +289,27 @@ Return ONLY the JSON response."""
             if result_text.endswith('```'):
                 result_text = result_text[:-3]
             
-            result = json.loads(result_text.strip())
+            # Clean control characters that can break JSON parsing
+            import re
+            # Remove control characters except newlines, tabs, and carriage returns
+            result_text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', result_text.strip())
+            
+            try:
+                result = json.loads(result_text)
+            except json.JSONDecodeError as json_error:
+                logger.error(f"JSON decode error: {json_error}")
+                logger.error(f"Response text (first 500 chars): {result_text[:500]}")
+                # Try to extract JSON from the response if it's embedded in text
+                import re as regex_module
+                json_match = regex_module.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', result_text, regex_module.DOTALL)
+                if json_match:
+                    try:
+                        result = json.loads(json_match.group(0))
+                        logger.info("Successfully extracted JSON from response")
+                    except:
+                        raise json_error
+                else:
+                    raise json_error
             if 'categories' not in result:
                 result = {'categories': result}
             

@@ -9,3 +9,4 @@ from app.models.note import RawNote, SynthesizedEntry
 
 __all__ = ['User', 'Contact', 'RawNote', 'SynthesizedEntry']
 
+

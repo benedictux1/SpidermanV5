@@ -45,3 +45,4 @@ class Contact(Base):
     def __repr__(self):
         return f"<Contact {self.full_name} (Tier {self.tier})>"
 
+

@@ -48,3 +48,4 @@ class SynthesizedEntry(Base):
     def __repr__(self):
         return f"<SynthesizedEntry {self.category} for Contact {self.contact_id}>"
 
+

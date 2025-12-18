@@ -7,6 +7,7 @@ import { get, post } from './utils/api.js';
 import { showNotification, showLoading, hideLoading } from './utils/ui.js';
 import { loadContacts, createContact, showContactDetail, showContactsList, deleteContact, currentContactId, openEditCategoriesModal, saveCategories } from './modules/contacts.js';
 import { processNote, clearAnalysisResults } from './modules/notes.js';
+import { initSearch } from './modules/search.js';
 
 // Check authentication on load (optional - login disabled)
 async function checkAuth() {
@@ -41,6 +42,7 @@ async function checkAuth() {
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
     setupEventHandlers();
+    initSearch();
 });
 
 function setupEventHandlers() {

@@ -11,6 +11,24 @@
         <header class="app-header">
             <h1>Kith Platform</h1>
             <div class="header-actions">
+                <div class="search-container" style="position: relative;">
+                    <input 
+                        type="text" 
+                        id="search-input" 
+                        class="search-input" 
+                        placeholder="Search contacts, categories, or notes..."
+                        autocomplete="off"
+                        style="padding: 0.5rem 2.5rem 0.5rem 1rem; border: 1px solid #ddd; border-radius: 20px; font-size: 0.9rem; width: 300px; outline: none;"
+                    />
+                    <span class="search-icon" style="position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); color: #666; pointer-events: none;">🔍</span>
+                    <button 
+                        id="clear-search-btn" 
+                        class="clear-search-btn" 
+                        style="display: none; position: absolute; right: 2.5rem; top: 50%; transform: translateY(-50%); background: none; border: none; color: #999; cursor: pointer; font-size: 1.2rem; padding: 0.25rem;"
+                        title="Clear search"
+                    >×</button>
+                    <div id="search-results-dropdown" class="search-results-dropdown" style="display: none;"></div>
+                </div>
                 <span id="current-user"></span>
                 <button id="export-csv-btn" class="btn btn-secondary" title="Download all data as CSV">📥 Export CSV</button>
                 <button id="logout-btn" class="btn btn-secondary">Logout</button>

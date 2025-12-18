@@ -22,6 +22,9 @@ export async function loadContacts() {
     }
 }
 
+// Make loadContacts available globally for search module
+window.loadContacts = loadContacts;
+
 function renderContacts(contacts) {
     const container = document.getElementById('contacts-list');
     if (!container) return;

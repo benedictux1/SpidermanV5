@@ -547,6 +547,168 @@ def update_categories(contact_id):
         return jsonify({'error': 'Failed to update categories', 'details': str(e)}), 500
 
 
+@contacts_bp.route('/search', methods=['GET'])
+def search_contacts():
+    """Search contacts by name, category content, or audit trail"""
+    try:
+        from sqlalchemy import or_, func
+        
+        user_id = get_user_id()
+        query = request.args.get('q', '').strip()
+        
+        if not query or len(query) < 1:
+            return jsonify({'results': [], 'query': query}), 200
+        
+        db_manager = DatabaseManager()
+        with db_manager.get_session() as session:
+            # Search pattern (case-insensitive)
+            search_pattern = f'%{query}%'
+            
+            # 1. Search by contact name (highest priority)
+            name_matches = session.query(Contact).filter(
+                Contact.user_id == user_id,
+                Contact.full_name.ilike(search_pattern)
+            ).all()
+            
+            # 2. Search in category content
+            category_matches = session.query(Contact).join(
+                SynthesizedEntry, Contact.id == SynthesizedEntry.contact_id
+            ).filter(
+                Contact.user_id == user_id,
+                SynthesizedEntry.content.ilike(search_pattern)
+            ).distinct().all()
+            
+            # 3. Search in audit trail (raw notes)
+            note_matches = session.query(Contact).join(
+                RawNote, Contact.id == RawNote.contact_id
+            ).filter(
+                Contact.user_id == user_id,
+                RawNote.content.ilike(search_pattern)
+            ).distinct().all()
+            
+            # Combine all matches and build results with match context
+            contact_results = {}
+            
+            # Process name matches (score: 100)
+            for contact in name_matches:
+                if contact.id not in contact_results:
+                    contact_results[contact.id] = {
+                        'contact': contact,
+                        'matches': [],
+                        'score': 0
+                    }
+                contact_results[contact.id]['matches'].append({
+                    'type': 'name',
+                    'category': None,
+                    'snippet': contact.full_name
+                })
+                contact_results[contact.id]['score'] += 100
+            
+            # Process category matches (score: 50)
+            for contact in category_matches:
+                if contact.id not in contact_results:
+                    contact_results[contact.id] = {
+                        'contact': contact,
+                        'matches': [],
+                        'score': 0
+                    }
+                
+                # Get matching entries for this contact
+                matching_entries = session.query(SynthesizedEntry).filter(
+                    SynthesizedEntry.contact_id == contact.id,
+                    SynthesizedEntry.content.ilike(search_pattern)
+                ).all()
+                
+                for entry in matching_entries:
+                    # Create snippet (50 chars before and after match)
+                    content = entry.content
+                    match_pos = content.lower().find(query.lower())
+                    if match_pos >= 0:
+                        start = max(0, match_pos - 30)
+                        end = min(len(content), match_pos + len(query) + 30)
+                        snippet = content[start:end]
+                        if start > 0:
+                            snippet = '...' + snippet
+                        if end < len(content):
+                            snippet = snippet + '...'
+                    else:
+                        snippet = content[:80] + '...' if len(content) > 80 else content
+                    
+                    contact_results[contact.id]['matches'].append({
+                        'type': 'category',
+                        'category': entry.category,
+                        'snippet': snippet
+                    })
+                    contact_results[contact.id]['score'] += 50
+            
+            # Process audit trail matches (score: 25)
+            for contact in note_matches:
+                if contact.id not in contact_results:
+                    contact_results[contact.id] = {
+                        'contact': contact,
+                        'matches': [],
+                        'score': 0
+                    }
+                
+                # Get matching notes for this contact
+                matching_notes = session.query(RawNote).filter(
+                    RawNote.contact_id == contact.id,
+                    RawNote.content.ilike(search_pattern)
+                ).all()
+                
+                for note in matching_notes:
+                    # Create snippet
+                    content = note.content
+                    match_pos = content.lower().find(query.lower())
+                    if match_pos >= 0:
+                        start = max(0, match_pos - 30)
+                        end = min(len(content), match_pos + len(query) + 30)
+                        snippet = content[start:end]
+                        if start > 0:
+                            snippet = '...' + snippet
+                        if end < len(content):
+                            snippet = snippet + '...'
+                    else:
+                        snippet = content[:80] + '...' if len(content) > 80 else content
+                    
+                    contact_results[contact.id]['matches'].append({
+                        'type': 'note',
+                        'category': None,
+                        'snippet': snippet,
+                        'source': note.source
+                    })
+                    contact_results[contact.id]['score'] += 25
+            
+            # Sort by score (descending), then by name
+            sorted_results = sorted(
+                contact_results.values(),
+                key=lambda x: (-x['score'], x['contact'].full_name.lower())
+            )
+            
+            # Format results
+            results = []
+            for result in sorted_results:
+                contact = result['contact']
+                results.append({
+                    'id': contact.id,
+                    'full_name': contact.full_name,
+                    'tier': contact.tier,
+                    'matches': result['matches'],
+                    'score': result['score']
+                })
+            
+            logger.info(f"Search '{query}' found {len(results)} contacts")
+            return jsonify({
+                'results': results,
+                'query': query,
+                'count': len(results)
+            }), 200
+            
+    except Exception as e:
+        current_app.logger.error(f"Error searching contacts: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to search contacts', 'details': str(e)}), 500
+
+
 @contacts_bp.route('/export/csv', methods=['GET'])
 def export_contacts_csv():
     """Export all contacts, categories, and audit trail to CSV"""

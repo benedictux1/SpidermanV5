@@ -100,16 +100,17 @@ async function performSearch(query, updateContactsList = false) {
     if (!dropdown) return;
     
     try {
-        const results = await get(`/contacts/search?q=${encodeURIComponent(query)}`);
+        const response = await get(`/contacts/search?q=${encodeURIComponent(query)}`);
+        const results = response.results || [];
         
-        if (results.results && results.results.length > 0) {
-            renderSearchResults(results.results, dropdown);
+        if (results.length > 0) {
+            renderSearchResults(results, dropdown, query);
             dropdown.style.display = 'block';
             
             // If Enter was pressed, also update the contacts list
             if (updateContactsList) {
                 isSearchMode = true;
-                renderContactsFromSearch(results.results);
+                renderContactsFromSearch(results, query);
             }
         } else {
             dropdown.innerHTML = '<div class="search-result-empty">No contacts found matching "' + escapeHtml(query) + '"</div>';
@@ -129,7 +130,7 @@ async function performSearch(query, updateContactsList = false) {
     }
 }
 
-function renderSearchResults(results, container) {
+function renderSearchResults(results, container, query) {
     container.innerHTML = results.map(result => {
         const matchInfo = result.matches.map(match => {
             if (match.type === 'name') {
@@ -144,7 +145,7 @@ function renderSearchResults(results, container) {
         }).join(', ');
         
         const snippet = result.matches[0]?.snippet || '';
-        const highlightedSnippet = highlightSearchTerm(snippet, result.query || '');
+        const highlightedSnippet = highlightSearchTerm(snippet, query || '');
         
         return `
             <div class="search-result-item" data-contact-id="${result.id}">
@@ -173,7 +174,7 @@ function renderSearchResults(results, container) {
     });
 }
 
-function renderContactsFromSearch(results) {
+function renderContactsFromSearch(results, query) {
     const contactsList = document.getElementById('contacts-list');
     if (!contactsList) return;
     
@@ -183,20 +184,24 @@ function renderContactsFromSearch(results) {
     }
     
     // Use the same rendering as loadContacts but with search results
-    contactsList.innerHTML = results.map(result => `
+    contactsList.innerHTML = results.map(result => {
+        const matchTypes = result.matches.map(m => {
+            if (m.type === 'name') return 'Name match';
+            if (m.type === 'category') return `${m.category.replace(/_/g, ' ')} match`;
+            if (m.type === 'note') return 'Note match';
+            return 'Match';
+        }).join(', ');
+        
+        return `
         <div class="contact-card" data-contact-id="${result.id}">
             <h3>${escapeHtml(result.full_name)}</h3>
             <span class="tier tier-${result.tier}">Tier ${result.tier}</span>
             <div style="font-size: 0.85rem; color: #666; margin-top: 0.5rem;">
-                ${result.matches.map(m => {
-                    if (m.type === 'name') return 'Name match';
-                    if (m.type === 'category') return `${m.category.replace(/_/g, ' ')} match`;
-                    if (m.type === 'note') return 'Note match';
-                    return 'Match';
-                }).join(', ')}
+                ${matchTypes}
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
     
     // Add click handlers
     contactsList.querySelectorAll('.contact-card').forEach(card => {

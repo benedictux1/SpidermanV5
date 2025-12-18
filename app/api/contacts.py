@@ -571,16 +571,14 @@ def search_contacts():
         
         db_manager = DatabaseManager()
         with db_manager.get_session() as session:
-            # Search pattern (case-insensitive) - use func.lower for PostgreSQL compatibility
-            from sqlalchemy import func
+            # Search pattern (case-insensitive)
             search_pattern = f'%{query}%'
-            query_lower = query.lower()
             
             # 1. Search by contact name (highest priority)
             try:
                 name_matches = session.query(Contact).filter(
                     Contact.user_id == user_id,
-                    func.lower(Contact.full_name).like(func.lower(search_pattern))
+                    Contact.full_name.ilike(search_pattern)
                 ).all()
                 logger.debug(f"Name matches: {len(name_matches)}")
             except Exception as e:
@@ -593,7 +591,7 @@ def search_contacts():
                     SynthesizedEntry, Contact.id == SynthesizedEntry.contact_id
                 ).filter(
                     Contact.user_id == user_id,
-                    func.lower(SynthesizedEntry.content).like(func.lower(search_pattern))
+                    SynthesizedEntry.content.ilike(search_pattern)
                 ).distinct().all()
                 logger.debug(f"Category matches: {len(category_matches)}")
             except Exception as e:
@@ -606,7 +604,7 @@ def search_contacts():
                     RawNote, Contact.id == RawNote.contact_id
                 ).filter(
                     Contact.user_id == user_id,
-                    func.lower(RawNote.content).like(func.lower(search_pattern))
+                    RawNote.content.ilike(search_pattern)
                 ).distinct().all()
                 logger.debug(f"Note matches: {len(note_matches)}")
             except Exception as e:
@@ -643,7 +641,7 @@ def search_contacts():
                 # Get matching entries for this contact
                 matching_entries = session.query(SynthesizedEntry).filter(
                     SynthesizedEntry.contact_id == contact.id,
-                    func.lower(SynthesizedEntry.content).like(func.lower(search_pattern))
+                    SynthesizedEntry.content.ilike(search_pattern)
                 ).all()
                 
                 for entry in matching_entries:
@@ -680,7 +678,7 @@ def search_contacts():
                 # Get matching notes for this contact
                 matching_notes = session.query(RawNote).filter(
                     RawNote.contact_id == contact.id,
-                    func.lower(RawNote.content).like(func.lower(search_pattern))
+                    RawNote.content.ilike(search_pattern)
                 ).all()
                 
                 for note in matching_notes:

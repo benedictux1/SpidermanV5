@@ -553,11 +553,21 @@ def search_contacts():
     try:
         from sqlalchemy import or_, func
         
-        user_id = get_user_id()
+        # Get user_id first and handle errors
+        try:
+            user_id = get_user_id()
+            logger.info(f"Search request - user_id={user_id}, query='{request.args.get('q', '')}'")
+        except Exception as user_error:
+            current_app.logger.error(f"Failed to get user_id for search: {user_error}", exc_info=True)
+            return jsonify({
+                'error': 'Database error: Could not get user account',
+                'details': str(user_error)
+            }), 500
+        
         query = request.args.get('q', '').strip()
         
         if not query or len(query) < 1:
-            return jsonify({'results': [], 'query': query}), 200
+            return jsonify({'results': [], 'query': query, 'count': 0}), 200
         
         db_manager = DatabaseManager()
         with db_manager.get_session() as session:

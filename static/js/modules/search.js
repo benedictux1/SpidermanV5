@@ -125,7 +125,9 @@ async function performSearch(query, updateContactsList = false) {
         }
     } catch (error) {
         console.error('Search error:', error);
-        dropdown.innerHTML = '<div class="search-result-empty">Error searching contacts</div>';
+        console.error('Error details:', error.details);
+        const errorMessage = error.details || error.message || 'Error searching contacts';
+        dropdown.innerHTML = '<div class="search-result-empty" style="color: #dc3545;">Error: ' + escapeHtml(errorMessage) + '</div>';
         dropdown.style.display = 'block';
     }
 }

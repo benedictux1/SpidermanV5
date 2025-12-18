@@ -571,30 +571,47 @@ def search_contacts():
         
         db_manager = DatabaseManager()
         with db_manager.get_session() as session:
-            # Search pattern (case-insensitive)
+            # Search pattern (case-insensitive) - use func.lower for PostgreSQL compatibility
+            from sqlalchemy import func
             search_pattern = f'%{query}%'
+            query_lower = query.lower()
             
             # 1. Search by contact name (highest priority)
-            name_matches = session.query(Contact).filter(
-                Contact.user_id == user_id,
-                Contact.full_name.ilike(search_pattern)
-            ).all()
+            try:
+                name_matches = session.query(Contact).filter(
+                    Contact.user_id == user_id,
+                    func.lower(Contact.full_name).like(func.lower(search_pattern))
+                ).all()
+                logger.debug(f"Name matches: {len(name_matches)}")
+            except Exception as e:
+                logger.error(f"Error in name search: {e}", exc_info=True)
+                name_matches = []
             
             # 2. Search in category content
-            category_matches = session.query(Contact).join(
-                SynthesizedEntry, Contact.id == SynthesizedEntry.contact_id
-            ).filter(
-                Contact.user_id == user_id,
-                SynthesizedEntry.content.ilike(search_pattern)
-            ).distinct().all()
+            try:
+                category_matches = session.query(Contact).join(
+                    SynthesizedEntry, Contact.id == SynthesizedEntry.contact_id
+                ).filter(
+                    Contact.user_id == user_id,
+                    func.lower(SynthesizedEntry.content).like(func.lower(search_pattern))
+                ).distinct().all()
+                logger.debug(f"Category matches: {len(category_matches)}")
+            except Exception as e:
+                logger.error(f"Error in category search: {e}", exc_info=True)
+                category_matches = []
             
             # 3. Search in audit trail (raw notes)
-            note_matches = session.query(Contact).join(
-                RawNote, Contact.id == RawNote.contact_id
-            ).filter(
-                Contact.user_id == user_id,
-                RawNote.content.ilike(search_pattern)
-            ).distinct().all()
+            try:
+                note_matches = session.query(Contact).join(
+                    RawNote, Contact.id == RawNote.contact_id
+                ).filter(
+                    Contact.user_id == user_id,
+                    func.lower(RawNote.content).like(func.lower(search_pattern))
+                ).distinct().all()
+                logger.debug(f"Note matches: {len(note_matches)}")
+            except Exception as e:
+                logger.error(f"Error in note search: {e}", exc_info=True)
+                note_matches = []
             
             # Combine all matches and build results with match context
             contact_results = {}
@@ -626,7 +643,7 @@ def search_contacts():
                 # Get matching entries for this contact
                 matching_entries = session.query(SynthesizedEntry).filter(
                     SynthesizedEntry.contact_id == contact.id,
-                    SynthesizedEntry.content.ilike(search_pattern)
+                    func.lower(SynthesizedEntry.content).like(func.lower(search_pattern))
                 ).all()
                 
                 for entry in matching_entries:
@@ -663,7 +680,7 @@ def search_contacts():
                 # Get matching notes for this contact
                 matching_notes = session.query(RawNote).filter(
                     RawNote.contact_id == contact.id,
-                    RawNote.content.ilike(search_pattern)
+                    func.lower(RawNote.content).like(func.lower(search_pattern))
                 ).all()
                 
                 for note in matching_notes:

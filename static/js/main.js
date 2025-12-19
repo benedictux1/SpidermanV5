@@ -213,5 +213,67 @@ function setupEventHandlers() {
     };
     
     // Inline editing is now handled in renderCategories function
+    
+    // Similar names checking function
+    async function checkSimilarNames(query) {
+        const dropdown = document.getElementById('similar-names-dropdown');
+        if (!dropdown) return;
+        
+        try {
+            const { get } = await import('./utils/api.js');
+            const response = await get(`/contacts/check-similar-names?q=${encodeURIComponent(query)}`);
+            const results = response.results || [];
+            
+            if (results.length > 0) {
+                renderSimilarNames(results, dropdown, query);
+                dropdown.style.display = 'block';
+            } else {
+                dropdown.innerHTML = '<div class="similar-name-empty">✓ No similar names found</div>';
+                dropdown.style.display = 'block';
+            }
+        } catch (error) {
+            console.error('Error checking similar names:', error);
+            dropdown.style.display = 'none';
+        }
+    }
+    
+    function renderSimilarNames(results, container, query) {
+        container.innerHTML = results.map(result => {
+            const matchTypeLabel = result.match_type === 'exact' ? '⚠️ Exact match' : 
+                                  result.match_type === 'very_similar' ? '⚠️ Very similar' : 
+                                  'ℹ️ Similar';
+            
+            const similarityPercent = Math.round(result.similarity * 100);
+            
+            return `
+                <div class="similar-name-item ${result.match_type === 'exact' ? 'exact-match' : result.match_type === 'very_similar' ? 'very-similar' : ''}" data-name="${escapeHtml(result.full_name)}">
+                    <div class="similar-name-name">
+                        ${escapeHtml(result.full_name)}
+                        <span class="similar-name-tier">Tier ${result.tier}</span>
+                    </div>
+                    <div class="similar-name-match-type">${matchTypeLabel} (${similarityPercent}% similar)</div>
+                </div>
+            `;
+        }).join('');
+        
+        // Add click handlers to fill the input
+        container.querySelectorAll('.similar-name-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const name = item.dataset.name;
+                const nameInput = document.getElementById('contact-name');
+                if (nameInput) {
+                    nameInput.value = name;
+                    nameInput.focus();
+                    container.style.display = 'none';
+                }
+            });
+        });
+    }
+    
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
 }
 

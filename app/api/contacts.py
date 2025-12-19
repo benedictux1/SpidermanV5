@@ -239,6 +239,79 @@ def get_contact(contact_id):
         return jsonify({'error': 'Failed to retrieve contact', 'details': str(e)}), 500
 
 
+@contacts_bp.route('/<int:contact_id>', methods=['PUT'])
+def update_contact(contact_id):
+    """Update contact name"""
+    try:
+        from datetime import datetime
+        
+        user_id = get_user_id()
+        data = request.get_json()
+        
+        if not data or 'full_name' not in data:
+            return jsonify({'error': 'Full name is required'}), 400
+        
+        new_name = data.get('full_name', '').strip()
+        if not new_name:
+            return jsonify({'error': 'Full name cannot be empty'}), 400
+        
+        db_manager = DatabaseManager()
+        with db_manager.get_session() as session:
+            # Verify contact ownership
+            contact = session.query(Contact).filter(
+                Contact.id == contact_id,
+                Contact.user_id == user_id
+            ).first()
+            
+            if not contact:
+                return jsonify({'error': 'Contact not found'}), 404
+            
+            old_name = contact.full_name
+            
+            # Only update if name actually changed
+            if old_name == new_name:
+                return jsonify({
+                    'success': True,
+                    'message': 'No changes made',
+                    'contact': {
+                        'id': contact.id,
+                        'full_name': contact.full_name,
+                        'tier': contact.tier
+                    }
+                }), 200
+            
+            # Update contact name
+            contact.full_name = new_name
+            contact.updated_at = datetime.utcnow()
+            
+            # Create audit trail entry
+            edit_summary = f"Manual edit: Name changed from '{old_name}' to '{new_name}'"
+            raw_note = RawNote(
+                contact_id=contact_id,
+                content=edit_summary,
+                source='manual_edit',
+                created_at=datetime.utcnow()
+            )
+            session.add(raw_note)
+            session.commit()
+            
+            logger.info(f"Updated contact {contact_id} name: '{old_name}' -> '{new_name}'")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Contact name updated successfully',
+                'contact': {
+                    'id': contact.id,
+                    'full_name': contact.full_name,
+                    'tier': contact.tier
+                }
+            }), 200
+            
+    except Exception as e:
+        current_app.logger.error(f"Error updating contact {contact_id}: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to update contact', 'details': str(e)}), 500
+
+
 @contacts_bp.route('/<int:contact_id>/logs', methods=['GET'])
 def get_contact_logs(contact_id):
     """Get audit trail (raw notes and synthesized entries) for a contact"""
@@ -545,6 +618,75 @@ def update_categories(contact_id):
     except Exception as e:
         current_app.logger.error(f"Error updating categories for contact {contact_id}: {e}", exc_info=True)
         return jsonify({'error': 'Failed to update categories', 'details': str(e)}), 500
+
+
+@contacts_bp.route('/check-similar-names', methods=['GET'])
+def check_similar_names():
+    """Check for similar contact names (for duplicate detection during creation)"""
+    try:
+        from difflib import SequenceMatcher
+        
+        user_id = get_user_id()
+        query = request.args.get('q', '').strip()
+        
+        if not query or len(query) < 1:
+            return jsonify({'results': [], 'query': query, 'count': 0}), 200
+        
+        db_manager = DatabaseManager()
+        with db_manager.get_session() as session:
+            # Get all contacts for the user
+            all_contacts = session.query(Contact).filter(
+                Contact.user_id == user_id
+            ).all()
+            
+            if not all_contacts:
+                return jsonify({'results': [], 'query': query, 'count': 0}), 200
+            
+            # Calculate similarity for each contact
+            results = []
+            query_lower = query.lower()
+            
+            for contact in all_contacts:
+                contact_name_lower = contact.full_name.lower()
+                
+                # Calculate similarity ratio (0.0 to 1.0)
+                similarity = SequenceMatcher(None, query_lower, contact_name_lower).ratio()
+                
+                # Check for exact match
+                is_exact = contact_name_lower == query_lower
+                
+                # Check if query is contained in contact name or vice versa
+                contains_query = query_lower in contact_name_lower
+                query_contains_name = contact_name_lower in query_lower
+                
+                # Include if:
+                # - Exact match
+                # - Similarity > 0.6 (60% similar)
+                # - Query is contained in name or name is contained in query
+                if is_exact or similarity > 0.6 or contains_query or query_contains_name:
+                    match_type = 'exact' if is_exact else ('very_similar' if similarity > 0.8 else 'similar')
+                    
+                    results.append({
+                        'id': contact.id,
+                        'full_name': contact.full_name,
+                        'tier': contact.tier,
+                        'similarity': similarity,
+                        'match_type': match_type
+                    })
+            
+            # Sort by similarity (exact matches first, then by similarity score)
+            results.sort(key=lambda x: (x['match_type'] != 'exact', -x['similarity']))
+            
+            logger.info(f"Found {len(results)} similar names for query '{query}'")
+            return jsonify({
+                'results': results,
+                'query': query,
+                'count': len(results)
+            }), 200
+            
+    except Exception as e:
+        current_app.logger.error(f"Error checking similar names: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to check similar names', 'details': str(e)}), 500
 
 
 @contacts_bp.route('/search', methods=['GET'])

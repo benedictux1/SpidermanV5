@@ -98,7 +98,7 @@ export async function showContactDetail(contactId) {
         
         // Load contact details
         const contact = await get(`/contacts/${contactId}`);
-        document.getElementById('contact-detail-name').textContent = contact.full_name;
+        renderContactName(contact.full_name, contactId);
         
         // Load categories
         renderCategories(contact.categorized_data || {});

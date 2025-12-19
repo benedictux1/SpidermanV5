@@ -126,9 +126,14 @@ IMPORTANT:
 - Extract specific, factual information - not interpretations
 - Confidence should be between 0.0 and 1.0 based on clarity of information
 - Be precise and concise in your extraction
-- PRESERVE FORMATTING: Maintain the original structure, bullet points, line breaks, and organization from the input text
-- Use markdown formatting (e.g., `- ` for bullet points, `**text**` for bold, line breaks with `\n`) to preserve the visual structure
-- If the input has categories, sections, or lists, maintain that hierarchy in the extracted content
+- **CRITICAL FORMATTING RULES:**
+  - PRESERVE ALL BULLET POINTS: If the input has bullet points (using `- `, `•`, `*`, `+`, or any list format), you MUST preserve them exactly as `- ` (dash-space) format in your output
+  - PRESERVE LINE BREAKS: Maintain all line breaks (`\n`) from the original text
+  - PRESERVE STRUCTURE: If the input has indented bullets, sub-bullets, or hierarchical lists, maintain that structure using `- ` for each level
+  - PRESERVE SECTIONS: If the input has headers, sections, or categories, maintain that organization
+  - Use markdown formatting: `- ` for bullet points, `**text**` for bold, `\n` for line breaks
+  - DO NOT convert bullet points to paragraphs - keep them as lists
+  - DO NOT flatten structured content - preserve lists, sections, and formatting exactly as they appear
 
 NEGATIVE CONSTRAINTS (What NOT to do):
 - Do NOT infer feelings, emotions, or internal states not explicitly stated

@@ -587,12 +587,18 @@ function renderMarkdown(text) {
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         
-        // Check if this is a bullet point
-        const bulletMatch = line.match(/^(\s*)-\s+(.+)$/);
+        // Check if this is a bullet point - support multiple formats:
+        // - `- ` (dash-space) - standard markdown
+        // - `• ` (Unicode bullet)
+        // - `* ` (asterisk)
+        // - `+ ` (plus)
+        // - `◦ ` (white circle)
+        // - `▪ ` (black square)
+        const bulletMatch = line.match(/^(\s*)([-•*+◦▪])\s+(.+)$/);
         
         if (bulletMatch) {
             const indent = bulletMatch[1].length;
-            const content = bulletMatch[2];
+            const content = bulletMatch[3]; // Get content after bullet marker
             
             // Process inline formatting in content
             const processedContent = processInlineMarkdown(content);

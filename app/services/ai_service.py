@@ -495,7 +495,7 @@ Return ONLY the JSON response."""
                 'recreational', 'leisure', 'pastime', 'pastimes', 'activity', 'activities'
             ]
             if any(word in content_lower for word in avocation_keywords):
-            categories['Avocation'] = {'content': content[:200], 'confidence': 0.6}
+                categories['Avocation'] = {'content': content[:200], 'confidence': 0.6}
                 logger.info(f"Fallback detected Avocation keywords in: {content[:50]}...")
         
         if not categories:

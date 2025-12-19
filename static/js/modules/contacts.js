@@ -683,5 +683,81 @@ function formatDate(dateString) {
     return date.toLocaleString();
 }
 
+function renderContactName(name, contactId) {
+    const nameElement = document.getElementById('contact-detail-name');
+    if (!nameElement) return;
+    
+    // Remove any existing edit mode
+    nameElement.classList.remove('editing');
+    nameElement.innerHTML = escapeHtml(name);
+    nameElement.onclick = () => startEditingName(contactId, name);
+}
+
+function startEditingName(contactId, currentName) {
+    const nameElement = document.getElementById('contact-detail-name');
+    if (!nameElement) return;
+    
+    // Create input field
+    nameElement.classList.add('editing');
+    nameElement.innerHTML = `
+        <input type="text" id="name-edit-input" value="${escapeHtml(currentName)}" style="width: 100%; max-width: 500px;">
+        <div class="name-edit-actions">
+            <button class="btn btn-primary btn-sm" id="save-name-btn">💾 Save</button>
+            <button class="btn btn-secondary btn-sm" id="cancel-name-btn">Cancel</button>
+        </div>
+    `;
+    
+    // Focus input
+    const input = document.getElementById('name-edit-input');
+    if (input) {
+        input.focus();
+        input.select();
+    }
+    
+    // Save button
+    document.getElementById('save-name-btn').onclick = () => saveContactName(contactId, input.value.trim());
+    
+    // Cancel button
+    document.getElementById('cancel-name-btn').onclick = () => {
+        // Reload contact to restore original name
+        showContactDetail(contactId);
+    };
+    
+    // Enter key to save
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            saveContactName(contactId, input.value.trim());
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            showContactDetail(contactId);
+        }
+    });
+}
+
+async function saveContactName(contactId, newName) {
+    if (!newName || newName.trim() === '') {
+        showNotification('Name cannot be empty', 'error');
+        return;
+    }
+    
+    try {
+        showLoading();
+        const { put } = await import('../utils/api.js');
+        const result = await put(`/contacts/${contactId}`, { full_name: newName });
+        
+        showNotification(result.message || 'Name updated successfully!', 'success');
+        
+        // Reload contact details to refresh everything
+        await showContactDetail(contactId);
+        
+    } catch (error) {
+        console.error('Error saving contact name:', error);
+        showNotification(error.message || 'Failed to update name', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
 export { currentContactId };
 

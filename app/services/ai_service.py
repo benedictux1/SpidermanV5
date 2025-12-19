@@ -296,10 +296,14 @@ Return ONLY a JSON object with this structure:
 }}
 
 IMPORTANT FORMATTING RULES:
-- PRESERVE FORMATTING: Maintain the original structure, bullet points, line breaks, and organization from the input text
-- Use markdown formatting (e.g., `- ` for bullet points, `**text**` for bold, line breaks with `\n`) to preserve the visual structure
-- If the input has categories, sections, or lists, maintain that hierarchy in the extracted content
-- Do NOT flatten structured content into a single paragraph - preserve lists, sections, and formatting
+- **CRITICAL FORMATTING RULES:**
+  - PRESERVE ALL BULLET POINTS: If the input has bullet points (using `- `, `•`, `*`, `+`, or any list format), you MUST preserve them exactly as `- ` (dash-space) format in your output
+  - PRESERVE LINE BREAKS: Maintain all line breaks (`\n`) from the original text
+  - PRESERVE STRUCTURE: If the input has indented bullets, sub-bullets, or hierarchical lists, maintain that structure using `- ` for each level
+  - PRESERVE SECTIONS: If the input has headers, sections, or categories, maintain that organization
+  - Use markdown formatting: `- ` for bullet points, `**text**` for bold, `\n` for line breaks
+  - DO NOT convert bullet points to paragraphs - keep them as lists
+  - DO NOT flatten structured content - preserve lists, sections, and formatting exactly as they appear
 
 CRITICAL: UNDERSTAND HIERARCHICAL STRUCTURE
 - When a header/title is followed by bullet points or a list, ALL items in that list inherit the context of the header
@@ -491,7 +495,7 @@ Return ONLY the JSON response."""
                 'recreational', 'leisure', 'pastime', 'pastimes', 'activity', 'activities'
             ]
             if any(word in content_lower for word in avocation_keywords):
-                categories['Avocation'] = {'content': content[:200], 'confidence': 0.6}
+            categories['Avocation'] = {'content': content[:200], 'confidence': 0.6}
                 logger.info(f"Fallback detected Avocation keywords in: {content[:50]}...")
         
         if not categories:

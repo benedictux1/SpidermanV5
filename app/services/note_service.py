@@ -72,6 +72,61 @@ class NoteService:
                 analysis_result = self.ai_service._fallback_analysis(content, contact.full_name)
                 categories = analysis_result.get('categories', {})
             
+            # Normalize category names (map invalid categories to valid ones)
+            VALID_CATEGORIES = {
+                'Actionable', 'Goals', 'Relationship_Strategy', 'Social',
+                'Professional_Background', 'Financial_Situation', 'Wellbeing',
+                'Avocation', 'Environment_And_Lifestyle', 'Psychology_And_Values',
+                'Communication_Style', 'Challenges_And_Development', 'Deeper_Insights',
+                'Admin_matters', 'Others'
+            }
+            
+            CATEGORY_MAP = {
+                'education': 'Professional_Background',
+                'Education': 'Professional_Background',
+                'EDUCATION': 'Professional_Background',
+                'experience': 'Professional_Background',
+                'Experience': 'Professional_Background',
+                'EXPERIENCE': 'Professional_Background',
+                'work': 'Professional_Background',
+                'Work': 'Professional_Background',
+                'career': 'Professional_Background',
+                'Career': 'Professional_Background',
+            }
+            
+            normalized_categories = {}
+            for category, data in categories.items():
+                # Normalize category name
+                category_lower = category.strip()
+                if category_lower in CATEGORY_MAP:
+                    normalized_name = CATEGORY_MAP[category_lower]
+                    logger.info(f"Normalizing category '{category}' to '{normalized_name}'")
+                elif category in VALID_CATEGORIES:
+                    normalized_name = category
+                else:
+                    # Invalid category - map to Others or Professional_Background based on content
+                    content_text = data.get('content', '') if isinstance(data, dict) else str(data)
+                    if any(keyword in content_text.lower() for keyword in ['education', 'degree', 'university', 'school', 'college', 'work', 'job', 'career', 'experience']):
+                        normalized_name = 'Professional_Background'
+                        logger.info(f"Mapping invalid category '{category}' to 'Professional_Background' based on content")
+                    else:
+                        normalized_name = 'Others'
+                        logger.info(f"Mapping invalid category '{category}' to 'Others'")
+                
+                # Merge if category already exists
+                if normalized_name in normalized_categories:
+                    existing_content = normalized_categories[normalized_name].get('content', '')
+                    new_content = data.get('content', '') if isinstance(data, dict) else str(data)
+                    normalized_categories[normalized_name]['content'] = f"{existing_content}\n\n{new_content}".strip()
+                    # Use higher confidence
+                    existing_conf = normalized_categories[normalized_name].get('confidence', 0.0)
+                    new_conf = data.get('confidence', 0.0) if isinstance(data, dict) else 0.0
+                    normalized_categories[normalized_name]['confidence'] = max(existing_conf, new_conf)
+                else:
+                    normalized_categories[normalized_name] = data if isinstance(data, dict) else {'content': str(data), 'confidence': 0.0}
+            
+            categories = normalized_categories
+            
             # Post-process: Remove "Others" if any other category exists (safety check)
             if 'Others' in categories:
                 other_categories = [k for k in categories.keys() if k != 'Others']

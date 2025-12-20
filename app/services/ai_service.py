@@ -16,7 +16,7 @@ CATEGORY_DEFINITIONS = """
 - Goals: Clearly defined aspirations and objectives across all life domains, including short-term targets (3-12 months), medium-term goals (1-5 years), and long-term visions (5+ years).
 - Relationship_Strategy: Structured approaches to nurturing, deepening, or improving your relationship with specific tactics for connection and support.
 - Social: Comprehensive mapping of their social ecosystem including family dynamics, friendship networks, romantic relationships, professional connections, community involvement.
-- Professional_Background: Detailed career history and occupational profile including employment timeline, educational credentials, skill inventory, achievement record.
+- Professional_Background: Detailed career history and occupational profile including employment timeline, educational credentials, skill inventory, achievement record. **IMPORTANT: Education information (degrees, universities, schools) should be categorized under Professional_Background, NOT as a separate "Education" category.**
 - Financial_Situation: Comprehensive portrait of their economic circumstances, money management approach, and financial outlook.
 - Wellbeing: Holistic health status encompassing physical, mental, emotional, and spiritual dimensions.
 - Avocation: Comprehensive inventory of non-professional interests, passions, and recreational activities. This includes hobbies, leisure activities, creative pursuits, sports, games, collections, and any activities done for enjoyment outside of work (e.g., cooking, reading, gardening, music, art, travel, etc.).

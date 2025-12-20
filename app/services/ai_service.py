@@ -136,9 +136,13 @@ IMPORTANT:
   - PRESERVE LINE BREAKS: Maintain all line breaks (`\n`) from the original text
   - PRESERVE STRUCTURE: If the input has indented bullets, sub-bullets, or hierarchical lists, maintain that structure using `- ` for each level
   - PRESERVE SECTIONS: If the input has headers, sections, or categories, maintain that organization
+  - PRESERVE HEADERS: If the input has section headers (like "Experience:", "Education:", job titles, etc.), keep them as separate lines with the same formatting
+  - PRESERVE JOB TITLES AND DATES: If the input has job titles with dates (e.g., "Manager: Jan 2020 - Dec 2022 • 2 yrs"), preserve this exact format
+  - PRESERVE HIERARCHY: Maintain the exact hierarchical structure - headers, sub-headers, job titles, descriptions, bullet points
   - Use markdown formatting: `- ` for bullet points, `**text**` for bold, `\n` for line breaks
   - DO NOT convert bullet points to paragraphs - keep them as lists
-  - DO NOT flatten structured content - preserve lists, sections, and formatting exactly as they appear
+  - DO NOT flatten structured content - preserve lists, sections, headers, and formatting exactly as they appear
+  - DO NOT merge separate lines into one paragraph - keep each line as a separate line
 
 NEGATIVE CONSTRAINTS (What NOT to do):
 - Do NOT infer feelings, emotions, or internal states not explicitly stated

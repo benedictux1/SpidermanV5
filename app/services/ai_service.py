@@ -286,7 +286,17 @@ Return ONLY the JSON response."""
             
             context_section = ""
             if context and context != "No relevant history found.":
-                context_section = f"**Retrieved Relevant History:**\n{context}\n\nUse the retrieved history to maintain consistency.\n\n"
+                context_section = f"""**Retrieved Relevant History (FOR REFERENCE ONLY - DO NOT RE-CATEGORIZE):**
+{context}
+
+IMPORTANT: The history above shows information that has ALREADY been categorized. Use it ONLY for:
+- Understanding context and maintaining consistency
+- Identifying if new information contradicts or updates old information
+- Building upon existing knowledge
+
+DO NOT extract or re-categorize any content from the history above. ONLY analyze the new note below.
+
+"""
             
             system_prompt = f"""You are an AI assistant that analyzes personal notes and extracts structured information into specific categories.
 
@@ -299,6 +309,11 @@ Return ONLY a JSON object with this structure:
         "category_name": {{"content": "specific factual information", "confidence": 0.85}}
     }}
 }}
+
+CRITICAL INSTRUCTION:
+- **ONLY extract information from the "New Note to Analyze" section in the user message**
+- **DO NOT extract or re-categorize any content from the "Retrieved Relevant History" section - that information has already been categorized**
+- The history is provided ONLY for context and consistency, not for re-categorization
 
 IMPORTANT FORMATTING RULES:
 - **CRITICAL: ONLY extract from the NEW note, not from the history section**

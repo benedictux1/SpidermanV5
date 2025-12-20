@@ -82,16 +82,21 @@ class AIService:
             context_section = ""
             if context and context != "No relevant history found.":
                 context_section = f"""
-**Retrieved Relevant History:**
+**Retrieved Relevant History (FOR REFERENCE ONLY - DO NOT RE-CATEGORIZE):**
 {context}
 
-Use the retrieved history to maintain consistency and build upon existing knowledge.
+IMPORTANT: The history above shows information that has ALREADY been categorized. Use it ONLY for:
+- Understanding context and maintaining consistency
+- Identifying if new information contradicts or updates old information
+- Building upon existing knowledge
+
+DO NOT extract or re-categorize any content from the history above. ONLY analyze the new note below.
 
 """
             
             prompt = f"""Analyze this note about {contact_name} and extract structured information.
 
-{context_section}**New Note to Analyze:**
+{context_section}**New Note to Analyze (ONLY EXTRACT FROM THIS SECTION):**
 {content}
 
 Categorize the content into these categories (only include if relevant):
@@ -296,6 +301,7 @@ Return ONLY a JSON object with this structure:
 }}
 
 IMPORTANT FORMATTING RULES:
+- **CRITICAL: ONLY extract from the NEW note, not from the history section**
 - **CRITICAL FORMATTING RULES:**
   - PRESERVE ALL BULLET POINTS: If the input has bullet points (using `- `, `•`, `*`, `+`, or any list format), you MUST preserve them exactly as `- ` (dash-space) format in your output
   - PRESERVE LINE BREAKS: Maintain all line breaks (`\n`) from the original text
@@ -317,11 +323,10 @@ CRITICAL CATEGORIZATION RULE:
 
 Only include categories with relevant content. Be factual and precise."""
             
-            user_prompt = f"""{context_section}Analyze this note about {contact_name} and extract structured information:
-
+            user_prompt = f"""{context_section}**New Note to Analyze (ONLY EXTRACT FROM THIS SECTION):**
 {content}
 
-Return ONLY the JSON response."""
+Return ONLY the JSON response with categories extracted from the NEW note above. Do NOT include any information from the history section."""
             
             try:
                 from openai import OpenAI
